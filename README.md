@@ -37,10 +37,11 @@ Most AI agents running on Windows fail because they rely on fragile shell wrappe
 ## Universal Agent Ecosystem Compatibility
 
 WinTerM connects out of the box with any AI agent framework:
-- 🤖 **Claude Code & Claude Desktop**: Native 32-tool FastMCP server configuration.
-- ⚡ **Google Antigravity**: Deep agent pair-programming and tool call integration.
-- 💻 **Cursor & Windsurf**: Terminal command synthesis and safe background execution.
-- 🌐 **LangChain, CrewAI & AutoGen**: Python SDK tool wrappers for multi-agent workflows.
+- 🤖 **Claude Code**: 1-command setup via `claude mcp add winterm python -m winterm.tools.mcp_server` (native `CLAUDE.md` and `.claude/skills/winterm/` included).
+- 🧩 **OpenCode**: Native `opencode.json` and `OPENCODE.md` integration for local open-source agent runs.
+- ⚡ **Google Antigravity**: Deep agent pair-programming, tool calling, and session ledger tracking.
+- 💻 **Cursor & Windsurf**: Terminal command synthesis and safe background desktop execution.
+- 🌐 **LangChain, CrewAI & AutoGen**: Python SDK tool wrappers for multi-agent swarms.
 - 🧠 **OpenAI Swarm & Assistants**: Exported OpenAI-compatible function calling schemas.
 
 
@@ -270,7 +271,27 @@ undo_res = agent.undo_last_action()
 
 Connect WinTerM directly to **Google Antigravity**, **Claude Desktop**, **Claude Code**, or any MCP-compatible AI agent framework. WinTerM exposes a full suite of 32 low-level and high-level tools alongside standardized agent guidance prompts.
 
-### MCP Configuration
+### Claude Code Integration (1-Command Setup)
+Add WinTerM directly to **Claude Code** via the CLI:
+```bash
+claude mcp add winterm python -m winterm.tools.mcp_server
+```
+Claude Code automatically reads the repository instructions in [`CLAUDE.md`](CLAUDE.md) and custom skills in [`.claude/skills/winterm/`](.claude/skills/winterm/).
+
+### OpenCode Integration
+OpenCode connects automatically via the repository's [`opencode.json`](opencode.json) and reads operating guidelines from [`OPENCODE.md`](OPENCODE.md):
+```json
+{
+  "mcp": {
+    "winterm": {
+      "type": "local",
+      "command": ["python", "-m", "winterm.tools.mcp_server"]
+    }
+  }
+}
+```
+
+### Generic MCP Client Configuration (Claude Desktop, Google Antigravity, Cursor)
 Add to your `mcp_config.json` or Claude Desktop configuration:
 ```json
 {

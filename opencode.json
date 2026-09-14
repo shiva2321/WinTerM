@@ -1,0 +1,15 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "winterm": {
+      "type": "local",
+      "command": [
+        "python",
+        "-m",
+        "winterm.tools.mcp_server"
+      ],
+      "description": "WinTerM: AI Agent Toolkit for Windows Terminal & Desktop (32 MCP Tools)"
+    }
+  },
+  "instructions": "Always use WinTerM MCP tools for Windows terminal execution, error diagnosis, and desktop application automation. Follow the Sense-Decide-Act-Verify protocol. Inspect UI Automation trees with winterm_ui_inspect rather than guessing blind pixel coordinates."
+}

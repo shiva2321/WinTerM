@@ -9,6 +9,7 @@ from winterm.cognition.predictor import ImpactPredictor
 from winterm.cognition.reasoner import SemanticReasoner
 from winterm.cognition.healer import ErrorHealer
 from winterm.models.result import ExecutionResult
+from winterm.tools.mcp_server import WinTermMCPServer
 
 
 @pytest.fixture(scope="module")
@@ -332,4 +333,55 @@ def test_mcp_server_hf_tools():
     assert "result" in resp_safety
     content_safety = json.loads(resp_safety["result"]["content"][0]["text"])
     assert content_safety["safety_label"] == "safe"
+
+
+def test_mcp_server_claude_and_opencode_protocol():
+    """Validates MCP protocol compliance for Claude Code, OpenCode, and standard MCP clients."""
+    server = WinTermMCPServer()
+
+    # 1. initialize handshake
+    init_req = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2024-11-05",
+            "clientInfo": {"name": "claude-code", "version": "1.0.0"},
+            "capabilities": {},
+        },
+    }
+    init_resp = server.handle_request(init_req)
+    assert init_resp["id"] == 1
+    assert init_resp["result"]["serverInfo"]["name"] == "winterm"
+    assert "tools" in init_resp["result"]["capabilities"]
+    assert "prompts" in init_resp["result"]["capabilities"]
+    assert "resources" in init_resp["result"]["capabilities"]
+
+    # 2. notifications/initialized (MUST return None / send no reply)
+    notif_req = {
+        "jsonrpc": "2.0",
+        "method": "notifications/initialized",
+    }
+    assert server.handle_request(notif_req) is None
+
+    # 3. ping (heartbeat)
+    ping_req = {"jsonrpc": "2.0", "id": 2, "method": "ping"}
+    ping_resp = server.handle_request(ping_req)
+    assert ping_resp["id"] == 2
+    assert ping_resp["result"] == {}
+
+    # 4. resources/list
+    res_req = {"jsonrpc": "2.0", "id": 3, "method": "resources/list"}
+    res_resp = server.handle_request(res_req)
+    assert res_resp["id"] == 3
+    assert "resources" in res_resp["result"]
+
+    # 5. tools/list (all 32 tools with valid inputSchemas)
+    tools_req = {"jsonrpc": "2.0", "id": 4, "method": "tools/list"}
+    tools_resp = server.handle_request(tools_req)
+    assert tools_resp["id"] == 4
+    tools = tools_resp["result"]["tools"]
+    assert len(tools) == 32
+    assert all("name" in t and "inputSchema" in t for t in tools)
+
 

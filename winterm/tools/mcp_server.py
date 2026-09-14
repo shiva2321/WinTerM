@@ -109,6 +109,10 @@ class WinTermMCPServer:
         method = req.get("method")
         msg_id = req.get("id")
 
+        # In JSON-RPC 2.0, notifications (no id) must NOT be responded to
+        if msg_id is None:
+            return None
+
         if method == "initialize":
             return {
                 "jsonrpc": "2.0",
@@ -120,10 +124,18 @@ class WinTermMCPServer:
                         "version": "0.3.0",
                     },
                     "capabilities": {
-                        "tools": {},
-                        "prompts": {},
+                        "tools": {"listChanged": False},
+                        "prompts": {"listChanged": False},
+                        "resources": {"subscribe": False, "listChanged": False},
                     },
                 },
+            }
+
+        elif method == "ping":
+            return {
+                "jsonrpc": "2.0",
+                "id": msg_id,
+                "result": {},
             }
 
         elif method == "prompts/list":
@@ -174,6 +186,20 @@ class WinTermMCPServer:
                 "result": {"tools": mcp_tools},
             }
 
+        elif method == "resources/list":
+            return {
+                "jsonrpc": "2.0",
+                "id": msg_id,
+                "result": {"resources": []},
+            }
+
+        elif method == "resources/templates/list":
+            return {
+                "jsonrpc": "2.0",
+                "id": msg_id,
+                "result": {"resourceTemplates": []},
+            }
+
         elif method == "tools/call":
             params = req.get("params", {})
             tool_name = params.get("name")
@@ -219,8 +245,9 @@ class WinTermMCPServer:
             try:
                 req = json.loads(line)
                 resp = self.handle_request(req)
-                sys.stdout.write(json.dumps(resp) + "\n")
-                sys.stdout.flush()
+                if resp is not None:
+                    sys.stdout.write(json.dumps(resp) + "\n")
+                    sys.stdout.flush()
             except Exception as ex:
                 err_resp = {
                     "jsonrpc": "2.0",
