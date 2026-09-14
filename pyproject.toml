@@ -1,0 +1,67 @@
+[build-system]
+requires = ["setuptools>=65.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "winterm"
+version = "0.3.0"
+description = "WinTerM: The AI Agent Toolkit for Windows Terminal & Desktop. 5W Cognitive Model, 10-Layer Subsystems, 32 MCP Tools & UI Automation."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [
+    { name = "WinTerM AI Team", email = "agent@winterm.ai" }
+]
+keywords = [
+    "ai-agents",
+    "mcp",
+    "model-context-protocol",
+    "windows-terminal",
+    "desktop-automation",
+    "claude-code",
+    "powershell",
+    "ui-automation",
+    "agent-toolkit"
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: Microsoft :: Windows :: Windows 10",
+    "Operating System :: Microsoft :: Windows :: Windows 11",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: System :: Systems Administration",
+    "Topic :: Software Development :: User Interfaces",
+]
+requires-python = ">=3.10"
+dependencies = [
+    "pydantic>=2.5.0",
+    "rich>=13.0.0",
+    "typer>=0.9.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+]
+mcp = [
+    "mcp>=1.0.0",
+]
+
+[project.scripts]
+winterm = "winterm.cli.main:app"
+
+[project.urls]
+Homepage = "https://github.com/shiva2321/WinTerM"
+Documentation = "https://github.com/shiva2321/WinTerM#readme"
+Repository = "https://github.com/shiva2321/WinTerM.git"
+Issues = "https://github.com/shiva2321/WinTerM/issues"
+Roadmap = "https://github.com/shiva2321/WinTerM/blob/main/ROADMAP.md"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
