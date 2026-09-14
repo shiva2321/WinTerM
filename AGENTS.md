@@ -35,6 +35,7 @@ When executing actions, use the **37 MCP tools** provided by WinTerM (`python -m
 3. **ACT**:
    - Focus the target window: `winterm_window_focus(window)`.
    - Execute the action using generic toolkit tools (`winterm_ui_click`, `winterm_input_type`, etc.).
+   - **After the first SENSE step resolves a window, target it by the numeric `Handle` (HWND) for every later call in the same task, not by title.** Window titles can change dynamically (unsaved-changes markers, the document's own content appearing in the title bar), so a title that matched during SENSE can silently stop matching by the time ACT/VERIFY run. Every window/UI tool accepts a `Handle` wherever it accepts a title.
 4. **VERIFY**:
    - Re-inspect UI tree or capture screenshot: `winterm_screen_capture()`.
    - If failed, diagnose with `diagnose_terminal_error` or query `winterm_graph_remedy_error`.
