@@ -36,6 +36,11 @@ from winterm.tools.tool_definitions import (
     winterm_input_mouse_drag,
     winterm_screen_state,
     winterm_screen_capture,
+    winterm_linux_execute,
+    winterm_linux_path_convert,
+    winterm_linux_distro_list,
+    winterm_linux_safety_check,
+    winterm_linux_diagnose_error,
     EXPORTED_TOOLS_SCHEMA,
 )
 
@@ -102,6 +107,11 @@ class WinTermMCPServer:
             "winterm_input_mouse_drag": winterm_input_mouse_drag,
             "winterm_screen_state": winterm_screen_state,
             "winterm_screen_capture": winterm_screen_capture,
+            "winterm_linux_execute": winterm_linux_execute,
+            "winterm_linux_path_convert": winterm_linux_path_convert,
+            "winterm_linux_distro_list": winterm_linux_distro_list,
+            "winterm_linux_safety_check": winterm_linux_safety_check,
+            "winterm_linux_diagnose_error": winterm_linux_diagnose_error,
         }
 
     def handle_request(self, req: Dict[str, Any]) -> Dict[str, Any]:

@@ -76,15 +76,17 @@ def execute_terminal_command(
     dry_run: bool = False,
     timeout_seconds: int = 60,
     auto_heal: bool = True,
+    confirm_high_risk: bool = False,
 ) -> Dict[str, Any]:
     """Executes a terminal command on Windows with strict reliability, UTF-8 safety, and self-healing.
-    
+
     Args:
         command: The command string to execute.
         target_shell: Target shell ('powershell_51', 'pwsh', or 'cmd').
         dry_run: If True, simulates execution without modifying system state.
         timeout_seconds: Max execution duration before terminating process tree.
         auto_heal: If True, automatically attempts remediation if command fails with known error.
+        confirm_high_risk: If True, allows high-risk/destructive commands to run (DANGEROUS).
     """
     shell_enum = ShellType(target_shell) if target_shell in [s.value for s in ShellType] else ShellType.POWERSHELL_51
     step = PlanStep(
@@ -96,7 +98,9 @@ def execute_terminal_command(
         target_shell=shell_enum,
         timeout_seconds=timeout_seconds,
     )
-    exec_res, verif_res, trace = _agent_instance.execute_step(step, dry_run=dry_run, auto_heal=auto_heal)
+    exec_res, verif_res, trace = _agent_instance.execute_step(
+        step, dry_run=dry_run, auto_heal=auto_heal, confirm_high_risk=confirm_high_risk
+    )
     return {
         "execution": exec_res.model_dump(),
         "verification": verif_res.model_dump() if verif_res else None,
@@ -389,6 +393,143 @@ def winterm_screen_capture(output_path: str, window_query: Optional[str] = None)
     return {"exit_code": exec_res.exit_code, "output": exec_res.stdout, "error": exec_res.stderr}
 
 
+def winterm_linux_execute(
+    command: str,
+    distro: Optional[str] = None,
+    timeout_seconds: int = 60,
+) -> Dict[str, Any]:
+    """Executes a bash or POSIX command in Linux or WSL2 with deterministic safety validation and self-healing.
+    
+    Args:
+        command: Linux bash command line to execute.
+        distro: Optional WSL distribution name (e.g. 'Ubuntu', 'Debian').
+        timeout_seconds: Subprocess timeout in seconds (default 60).
+    """
+    from winterm.knowledge.linux_safety import LinuxSafetyGuard
+    from winterm.knowledge.linux_errors import LinuxErrorCatalog
+
+    # 1. Deterministic safety evaluation
+    verdict = LinuxSafetyGuard.evaluate(command)
+    if verdict.label == "destructive":
+        return {
+            "success": False,
+            "exit_code": -1,
+            "stdout": "",
+            "stderr": f"BLOCKED BY LINUX SAFETY GUARD: {verdict.warning} (Target: {verdict.matched_target})",
+            "safety_verdict": {
+                "label": verdict.label,
+                "is_dangerous": verdict.is_dangerous,
+                "warning": verdict.warning,
+            },
+        }
+
+    # 2. Non-interactive switch enforcement
+    sanitized_cmd = LinuxSafetyGuard.make_non_interactive(command)
+    exec_res = _agent_instance.executor.execute(
+        command=sanitized_cmd,
+        shell=ShellType.WSL_BASH,
+        timeout_seconds=timeout_seconds,
+        auto_diagnose=True,
+    )
+
+    # 3. Linux error diagnosis fallback
+    linux_healing = None
+    if not exec_res.success:
+        healing = LinuxErrorCatalog.diagnose(
+            stdout=exec_res.stdout,
+            stderr=exec_res.stderr,
+            exit_code=exec_res.exit_code,
+            failed_command=command,
+        )
+        if healing:
+            linux_healing = healing.model_dump()
+
+    return {
+        "success": exec_res.success,
+        "exit_code": exec_res.exit_code,
+        "stdout": exec_res.stdout,
+        "stderr": exec_res.stderr,
+        "duration_ms": exec_res.duration_ms,
+        "safety_verdict": {
+            "label": verdict.label,
+            "is_dangerous": verdict.is_dangerous,
+            "warning": verdict.warning,
+        },
+        "healing_proposal": linux_healing or (exec_res.healing_proposal.model_dump() if exec_res.healing_proposal else None),
+    }
+
+
+def winterm_linux_path_convert(path: str, to_linux: bool = True) -> Dict[str, Any]:
+    """Converts file and directory paths between Windows format (C:\\...) and Linux format (/mnt/c/...).
+    
+    Args:
+        path: Path string to translate.
+        to_linux: If True converts Windows to Linux path; if False converts Linux to Windows path.
+    """
+    from winterm.subsystems.linux_subsystem import LinuxSubsystem
+    converted = LinuxSubsystem.convert_path(path, to_linux=to_linux)
+    return {
+        "input_path": path,
+        "to_linux": to_linux,
+        "converted_path": converted,
+    }
+
+
+def winterm_linux_distro_list() -> Dict[str, Any]:
+    """Enumerates installed WSL Linux distributions, current running states, and WSL version."""
+    from winterm.subsystems.linux_subsystem import LinuxSubsystem
+    step = LinuxSubsystem.list_wsl_distros()
+    exec_res = _agent_instance.executor.execute(command=step.command, shell=step.target_shell)
+    return {
+        "success": exec_res.success,
+        "exit_code": exec_res.exit_code,
+        "raw_output": exec_res.stdout,
+    }
+
+
+def winterm_linux_safety_check(command: str) -> Dict[str, Any]:
+    """Evaluates a proposed Linux or bash command against deterministic safety rules without executing.
+    
+    Args:
+        command: The Linux / bash command string to audit.
+    """
+    from winterm.knowledge.linux_safety import LinuxSafetyGuard
+    verdict = LinuxSafetyGuard.evaluate(command)
+    return {
+        "command": command,
+        "label": verdict.label,
+        "is_dangerous": verdict.is_dangerous,
+        "warning": verdict.warning,
+        "matched_pattern": verdict.matched_pattern,
+        "matched_target": verdict.matched_target,
+        "non_interactive_command": LinuxSafetyGuard.make_non_interactive(command),
+    }
+
+
+def winterm_linux_diagnose_error(
+    output: str,
+    exit_code: int = 1,
+    failed_command: str = "",
+) -> Dict[str, Any]:
+    """Diagnoses Linux and POSIX terminal failure outputs and recommends an automated recovery remedy.
+    
+    Args:
+        output: Stderr or console output from the failed Linux command.
+        exit_code: Non-zero exit status code (e.g. 127, 126, 137, 139).
+        failed_command: The command string that produced the failure.
+    """
+    from winterm.knowledge.linux_errors import LinuxErrorCatalog
+    healing = LinuxErrorCatalog.diagnose(
+        stdout="",
+        stderr=output,
+        exit_code=exit_code,
+        failed_command=failed_command,
+    )
+    if healing:
+        return {"diagnosed": True, "proposal": healing.model_dump()}
+    return {"diagnosed": False, "message": "No specific Linux error signature matched."}
+
+
 # Tool JSON Schema for LLM Function Calling (OpenAI / Gemini / Anthropic)
 EXPORTED_TOOLS_SCHEMA = [
     {
@@ -449,6 +590,7 @@ EXPORTED_TOOLS_SCHEMA = [
                     "dry_run": {"type": "boolean", "default": False},
                     "timeout_seconds": {"type": "integer", "default": 60},
                     "auto_heal": {"type": "boolean", "default": True},
+                    "confirm_high_risk": {"type": "boolean", "default": False, "description": "Allow high-risk/destructive commands to run (DANGEROUS)."},
                 },
                 "required": ["command"],
             },
@@ -854,6 +996,78 @@ EXPORTED_TOOLS_SCHEMA = [
                     "window_query": {"type": "string", "description": "Optional window title filter to capture only a specific window."},
                 },
                 "required": ["output_path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "winterm_linux_execute",
+            "description": "Executes a bash or POSIX command in Linux or WSL2 with deterministic safety validation, non-interactive flags, and self-healing.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "command": {"type": "string", "description": "Linux bash command line to execute."},
+                    "distro": {"type": "string", "description": "Optional WSL distribution name (e.g. 'Ubuntu', 'Debian')."},
+                    "timeout_seconds": {"type": "integer", "default": 60, "description": "Timeout in seconds."},
+                },
+                "required": ["command"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "winterm_linux_path_convert",
+            "description": "Converts file and directory paths between Windows format (C:\\...) and Linux / WSL format (/mnt/c/...).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Path string to translate."},
+                    "to_linux": {"type": "boolean", "default": True, "description": "If true converts Windows to Linux; if false Linux to Windows."},
+                },
+                "required": ["path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "winterm_linux_distro_list",
+            "description": "Enumerates installed WSL Linux distributions, current running states, and default distro.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "winterm_linux_safety_check",
+            "description": "Evaluates a proposed Linux or bash command against deterministic safety rules without executing.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "command": {"type": "string", "description": "The Linux / bash command string to audit."},
+                },
+                "required": ["command"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "winterm_linux_diagnose_error",
+            "description": "Diagnoses Linux and POSIX terminal failure outputs and recommends an automated recovery remedy.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "output": {"type": "string", "description": "Stderr or console output from the failed Linux command."},
+                    "exit_code": {"type": "integer", "default": 1, "description": "Non-zero exit status code."},
+                    "failed_command": {"type": "string", "default": "", "description": "The command string that produced the failure."},
+                },
+                "required": ["output"],
             },
         },
     },

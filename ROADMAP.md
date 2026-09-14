@@ -44,9 +44,10 @@ Enable any LLM agent—whether running in Claude Code, Google Antigravity, Curso
 
 ### Phase 5: Ecosystem Integrations & Sandbox Orchestration (v0.5.0) — 🔮 PLANNED
 - [ ] **1-Click Agent Launchers**: Native plugins for Claude Desktop, Claude Code, Cursor IDE, and VS Code extensions.
+- [x] **Deep WSL2 & Linux Interop (Completed v0.4.0)**: Deterministic Linux safety guard, POSIX error self-healing, non-interactive flags, Layer 10 `LinuxSubsystem`, and bidirectional path resolution (`C:\...` <-> `/mnt/c/...`).
+- [x] **Simultaneous Multi-Agent Coexistence (Completed v0.4.0)**: Cross-agent session registry, resource leases/locks (`AgentSessionCoordinator`), and native instruction manuals for Google Gemini (`GEMINI.md`) and DeepSeek (`DEEPSEEK.md`).
 - [ ] **Windows Sandbox & Hyper-V Disposable Runners**: Allow agents to spin up disposable Windows Sandbox environments (`WindowsSandbox.exe`) for high-risk executions.
 - [ ] **Audio Endpoint & Media Subsystem**: Enumerate audio output devices, switch default playback endpoints, and monitor system audio streams.
-- [ ] **Deep WSL2 Interop**: Bidirectional path resolution (`\\wsl$\...` <-> `/mnt/c/...`) and seamless cross-kernel execution pipelines.
 
 ---
 

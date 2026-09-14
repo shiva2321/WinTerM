@@ -29,6 +29,50 @@ def test_agent_dry_run():
     assert "[DRY-RUN]" in res.stdout
 
 
+def test_safety_gate_refuses_destructive_without_confirmation():
+    """HIGH_DESTRUCTIVE commands must be refused unless explicitly confirmed."""
+    agent = WinTermAgent()
+    from winterm.models.intent import PlanStep, ActionCategory
+    from winterm.models.context import ShellType, ElevationLevel
+
+    step = PlanStep(
+        step_id="destructive-test",
+        title="Delete system folder",
+        category=ActionCategory.CUSTOM,
+        raw_intent="delete system32",
+        command="Remove-Item -Recurse -Force C:\\Windows\\System32",
+        target_shell=ShellType.POWERSHELL_51,
+        required_elevation=ElevationLevel.STANDARD,
+    )
+
+    # Without confirmation -> refused, nothing executed
+    res, verif, trace = agent.execute_step(step, dry_run=False, confirm_high_risk=False)
+    assert res.success is False
+    assert "SAFETY GATE" in res.stderr
+    assert res.exit_code == -100
+
+
+def test_safety_gate_allows_safe_commands():
+    """Read-only commands execute normally through the gate."""
+    agent = WinTermAgent()
+    from winterm.models.intent import PlanStep, ActionCategory
+    from winterm.models.context import ShellType, ElevationLevel
+
+    step = PlanStep(
+        step_id="safe-test",
+        title="Query processes",
+        category=ActionCategory.CUSTOM,
+        raw_intent="list processes",
+        command="Get-Process | Select-Object -First 1 Name",
+        target_shell=ShellType.POWERSHELL_51,
+        required_elevation=ElevationLevel.STANDARD,
+    )
+
+    res, verif, trace = agent.execute_step(step, dry_run=False, confirm_high_risk=False)
+    assert res.success is True
+    assert res.exit_code == 0
+
+
 def test_agent_live_execution_and_session_recording():
     agent = WinTermAgent()
     plan = agent.plan("Query system hardware info")

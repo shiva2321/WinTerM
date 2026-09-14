@@ -337,7 +337,34 @@ class WindowsKnowledgeGraph:
     # =========================================================================
 
     def get_safety_classification(self, command_string: str) -> Dict[str, Any]:
-        """Classifies safety level, detected warnings, and operational risk tiers."""
+        """Classifies safety level, detected warnings, and operational risk tiers.
+
+        A deterministic :class:`SafetyGuard` runs first so destructive commands
+        (deletion of protected paths, power control, registry surgery) can never
+        fall through to ``safe`` when the SFT graph rules are too sparse to
+        match. Graph rules enrich the result only when the guard is neutral.
+        """
+        from winterm.knowledge.safety_guard import SafetyGuard
+
+        # Deterministic first pass — never fail-open on destructive commands.
+        verdict = SafetyGuard().classify(command_string)
+        if verdict is not None and verdict.label in ("destructive", "privileged"):
+            return {
+                "safety_label": verdict.label,
+                "skill": verdict.skill,
+                "warning": verdict.warning,
+                "is_dangerous": verdict.is_dangerous,
+            }
+        # A read-only query is authoritatively safe — the sparse SFT graph rules
+        # must not downgrade it to network_sensitive or privileged.
+        if verdict is not None and verdict.label == "safe":
+            return {
+                "safety_label": "safe",
+                "skill": verdict.skill,
+                "warning": verdict.warning,
+                "is_dangerous": False,
+            }
+
         cmd_lower = command_string.lower()
         matched_rules = []
 
@@ -354,11 +381,30 @@ class WindowsKnowledgeGraph:
             severity_order = {"destructive": 4, "credential_sensitive": 3, "privileged": 2, "network_sensitive": 1, "safe": 0}
             matched_rules.sort(key=lambda r: severity_order.get(r.get("safety_label", "safe"), 0), reverse=True)
             top_rule = matched_rules[0]
+            # Prefer the deterministic guard's network-sensitive verdict if the
+            # graph only produced a weaker classification.
+            if verdict is not None and severity_order.get(verdict.label, 0) > severity_order.get(top_rule.get("safety_label", "safe"), 0):
+                return {
+                    "safety_label": verdict.label,
+                    "skill": verdict.skill,
+                    "warning": verdict.warning,
+                    "is_dangerous": verdict.is_dangerous,
+                }
             return {
                 "safety_label": top_rule.get("safety_label", "safe"),
                 "skill": top_rule.get("skill", "unknown"),
                 "warning": top_rule.get("warning", ""),
                 "is_dangerous": top_rule.get("safety_label") in ("destructive", "credential_sensitive", "privileged"),
+            }
+
+        # Network-sensitive verdict from the deterministic guard is still useful
+        # even though the graph found no rule.
+        if verdict is not None:
+            return {
+                "safety_label": verdict.label,
+                "skill": verdict.skill,
+                "warning": verdict.warning,
+                "is_dangerous": verdict.is_dangerous,
             }
 
         return {

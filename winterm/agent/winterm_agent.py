@@ -8,7 +8,7 @@ from winterm.models.intent import ExecutionPlan, PlanStep, StepStatus
 from winterm.models.impact import PredictedImpact, RiskLevel, RollbackAction
 from winterm.models.reasoning import DecisionTrace
 from winterm.models.result import ExecutionResult, VerificationResult
-from winterm.models.context import SystemContext, ShellType
+from winterm.models.context import SystemContext, ShellType, ElevationLevel
 from winterm.engine.environment import WindowsEnvironment
 from winterm.engine.executor import WindowsShellExecutor
 from winterm.cognition.planner import TerminalPlanner
@@ -92,11 +92,27 @@ class WinTermAgent:
         step: PlanStep,
         dry_run: bool = False,
         auto_heal: bool = True,
+        confirm_high_risk: bool = False,
     ) -> Tuple[ExecutionResult, Optional[VerificationResult], DecisionTrace]:
-        """Executes a single step across the entire 5W lifecycle."""
+        """Executes a single step across the entire 5W lifecycle.
+
+        Safety gate: a step predicted as HIGH_DESTRUCTIVE (or requiring
+        elevation without an elevated shell) is REFUSED unless
+        ``confirm_high_risk=True``. This prevents autonomous agents from
+        running destructive commands like ``Remove-Item`` on protected paths,
+        ``Stop-Computer``, or ``Format-Volume`` without explicit confirmation.
+        """
         # 1. Explain and synthesize
         trace = self.explain(step)
         impact = self.predictor.predict_step_impact(step)
+
+        # 1b. SAFETY GATE — refuse destructive / unconfirmed-elevation steps (skipped during dry_run)
+        if not dry_run:
+            refusal = self._safety_gate(step, impact, confirm_high_risk)
+            if refusal is not None:
+                step.status = StepStatus.REFUSED if hasattr(StepStatus, "REFUSED") else StepStatus.FAILED
+                self.session.record_step(step, trace=trace, exec_res=refusal, rollback=None)
+                return refusal, None, trace
 
         # 2. Check preconditions and idempotency (WHEN)
         all_passed, should_skip, failures = self.scheduler.evaluate_preconditions(trace.when)
@@ -165,18 +181,57 @@ class WinTermAgent:
 
         return exec_res, verif_res, trace
 
+    def _safety_gate(
+        self,
+        step: PlanStep,
+        impact: PredictedImpact,
+        confirm_high_risk: bool,
+    ) -> Optional[ExecutionResult]:
+        """Blocks destructive / unconfirmed-elevation steps from executing.
+
+        Returns an ExecutionResult refusal when the step must not run, or
+        ``None`` when execution may proceed.
+        """
+        from winterm.models.impact import RiskLevel
+
+        if impact.risk_level in (RiskLevel.HIGH_DESTRUCTIVE, RiskLevel.ELEVATION_REQUIRED):
+            if impact.risk_level == RiskLevel.ELEVATION_REQUIRED and step.required_elevation == ElevationLevel.ADMIN:
+                # Elevation requirement is already declared on the step; the
+                # UAC wrapper handles it at execution time.
+                return None
+
+            if not confirm_high_risk:
+                reasons = "; ".join(impact.warnings[:3]) if impact.warnings else "classified as high risk"
+                return ExecutionResult(
+                    step_id=step.step_id,
+                    command=step.command,
+                    shell=step.target_shell,
+                    success=False,
+                    exit_code=-100,
+                    stdout="",
+                    stderr=(
+                        f"[SAFETY GATE] Refused to execute: {reasons}\n"
+                        "This step was predicted to be high-risk/destructive. "
+                        "Re-run with confirm_high_risk=True to execute it explicitly."
+                    ),
+                )
+        return None
+
     def run_goal(
         self,
         goal: str,
         dry_run: bool = False,
         auto_heal: bool = True,
+        confirm_high_risk: bool = False,
     ) -> List[Tuple[ExecutionResult, Optional[VerificationResult], DecisionTrace]]:
         """Plans, explains, executes, and verifies an entire goal end-to-end."""
         plan = self.plan(goal)
         results = []
 
         for step in plan.steps:
-            res, verif, trace = self.execute_step(step, dry_run=dry_run, auto_heal=auto_heal)
+            res, verif, trace = self.execute_step(
+                step, dry_run=dry_run, auto_heal=auto_heal, confirm_high_risk=confirm_high_risk
+            )
             results.append((res, verif, trace))
             if not res.success and not dry_run:
                 # Stop on unrecoverable failure

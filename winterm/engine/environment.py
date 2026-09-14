@@ -27,17 +27,46 @@ class WindowsEnvironment:
         os_version = platform.version()
         arch = platform.machine()
 
+        # Linux / WSL detection
+        is_linux_host = (os_name == "Linux")
+        is_wsl = False
+        linux_distro = ""
+
+        if is_linux_host:
+            # Check WSL via /proc/version or env
+            if "WSL_DISTRO_NAME" in os.environ:
+                is_wsl = True
+                linux_distro = os.environ.get("WSL_DISTRO_NAME", "")
+            elif os.path.exists("/proc/version"):
+                try:
+                    with open("/proc/version", "r", encoding="utf-8") as f:
+                        vcontent = f.read().lower()
+                        if "microsoft" in vcontent or "wsl" in vcontent:
+                            is_wsl = True
+                except Exception:
+                    pass
+            # Read distro name from /etc/os-release
+            if not linux_distro and os.path.exists("/etc/os-release"):
+                try:
+                    with open("/etc/os-release", "r", encoding="utf-8") as f:
+                        for line in f:
+                            if line.startswith("NAME="):
+                                linux_distro = line.split("=")[1].strip().strip('"')
+                                break
+                except Exception:
+                    pass
+
         # Elevation
         elevation = ElevationRules.detect_elevation_level()
 
-        # PowerShell version check
-        ps_version = "5.1"
+        # PowerShell / Bash version check
+        ps_version = "5.1" if os_name == "Windows" else "N/A"
         pwsh_available = shutil.which("pwsh") is not None
         wsl_available = shutil.which("wsl") is not None
 
         # Detect package managers
         package_managers = []
-        for pm in ["winget", "choco", "scoop"]:
+        for pm in ["winget", "choco", "scoop", "apt", "apt-get", "dnf", "yum", "pacman", "apk"]:
             if shutil.which(pm) is not None:
                 package_managers.append(pm)
 
@@ -72,6 +101,9 @@ class WindowsEnvironment:
             powershell_version=ps_version,
             pwsh_available=pwsh_available,
             wsl_available=wsl_available,
+            is_wsl=is_wsl,
+            is_linux_host=is_linux_host,
+            linux_distro=linux_distro,
             current_elevation=elevation,
             current_directory=os.getcwd(),
             active_code_page=code_page,

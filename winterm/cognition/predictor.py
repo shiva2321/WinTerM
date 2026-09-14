@@ -54,15 +54,12 @@ class ImpactPredictor:
             risk = RiskLevel.ELEVATION_REQUIRED
             warnings.append("Requires Administrative privileges. Will prompt UAC or require elevated shell.")
 
-        # HuggingFace SFT Safety Guard evaluation
+        # HuggingFace SFT Safety Guard evaluation (early risk escalation only;
+        # the final safety classification + warning is applied once at the end).
         safety_info = kg.get_safety_classification(cmd)
         if safety_info.get("is_dangerous"):
             if safety_info.get("safety_label") == "destructive" and risk != RiskLevel.HIGH_DESTRUCTIVE:
                 risk = RiskLevel.HIGH_DESTRUCTIVE
-            if safety_info.get("warning"):
-                warnings.append(f"Safety Guard Alert: {safety_info['warning']}")
-            elif safety_info.get("safety_label") == "credential_sensitive":
-                warnings.append(f"Security Alert: Command involves credential-sensitive operations ({safety_info.get('skill', 'general')}).")
 
         # 1. Process termination
         if "stop-process" in cmd_lower or "taskkill" in cmd_lower:
@@ -194,7 +191,9 @@ class ImpactPredictor:
             risk = RiskLevel.READ_ONLY
             side_effects.append("No system state modification. Read-only diagnostic query.")
 
-        # Check Knowledge Graph safety classification (mshojaei77/terminal-command-execution-sft)
+        # Final safety classification from the deterministic guard / SFT graph
+        # (single authoritative pass — runs last so it cannot be overwritten by
+        # the heuristic elif chain above).
         safety_info = kg.get_safety_classification(cmd)
         if safety_info.get("is_dangerous"):
             if safety_info.get("safety_label") == "destructive":
@@ -202,9 +201,9 @@ class ImpactPredictor:
             elif risk in (RiskLevel.SAFE, RiskLevel.READ_ONLY):
                 risk = RiskLevel.MEDIUM
             if safety_info.get("warning"):
-                warnings.append(f"Knowledge Graph Safety Alert: {safety_info.get('warning')}")
+                warnings.append(f"Safety Guard Alert: {safety_info.get('warning')}")
             else:
-                warnings.append(f"Knowledge Graph Safety Alert: Classified as '{safety_info.get('safety_label')}' (skill: {safety_info.get('skill')}).")
+                warnings.append(f"Safety Guard Alert: Classified as '{safety_info.get('safety_label')}' (skill: {safety_info.get('skill')}).")
 
         return PredictedImpact(
             step_id=step.step_id,

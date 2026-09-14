@@ -3,15 +3,18 @@
 [![GitHub Repo](https://img.shields.io/badge/GitHub-shiva2321%2FWinTerM-181717?logo=github)](https://github.com/shiva2321/WinTerM)
 [![Windows](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011%20%7C%20Server-0078D6?logo=windows)](https://microsoft.com)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python)](https://python.org)
-[![Tests](https://img.shields.io/badge/Tests-88%2F88%20Passing-brightgreen?logo=pytest)](https://github.com/shiva2321/WinTerM/actions)
+[![Tests](https://img.shields.io/badge/Tests-104%2F104%20Passing-brightgreen?logo=pytest)](https://github.com/shiva2321/WinTerM/actions)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Model Context Protocol](https://img.shields.io/badge/MCP-32%20Tools%20%2B%20Prompts-FF6B6B)](https://modelcontextprotocol.io)
+[![Model Context Protocol](https://img.shields.io/badge/MCP-37%20Tools%20%2B%20Prompts-FF6B6B)](https://modelcontextprotocol.io)
+[![Gemini Ready](https://img.shields.io/badge/Gemini-Native%20Support-8E75B2?logo=google)](GEMINI.md)
+[![DeepSeek Ready](https://img.shields.io/badge/DeepSeek-R1%20CoT%20Aligned-007AFF?logo=deepseek)](DEEPSEEK.md)
+[![Linux & WSL2](https://img.shields.io/badge/Linux%20%26%20WSL2-Deterministic%20Safety-FCC624?logo=linux&logoColor=black)](winterm/subsystems/linux_subsystem.py)
 [![PRs Welcome](https://img.shields.io/badge/PRs-Welcome-brightgreen.svg)](CONTRIBUTING.md)
 [![Roadmap](https://img.shields.io/badge/Roadmap-Public-blueviolet)](ROADMAP.md)
 
-**WinTerM** is the foundational AI Agent Toolkit purpose-built for the Windows operating system. It equips autonomous agents with deep terminal mastery, reliable execution mechanics, interactive desktop GUI automation, and an epistemological **5W Cognitive Model**:
+**WinTerM** is the foundational AI Agent Toolkit purpose-built for the Windows operating system and Linux/WSL2 environments. It equips autonomous agents with deep terminal mastery, reliable execution mechanics, interactive desktop GUI automation, multi-agent concurrency coordination, and an epistemological **5W Cognitive Model**:
 - **WHAT to do**: Natural language intent decomposition into staged Directed Acyclic Graph (DAG) plans.
-- **HOW to do**: Production-grade Windows Shell reliability (PowerShell 5.1/7+, CMD, Win32), quoting, escaping, call operator `&`, UTF-8 byte preservation, elevation handling, and non-interactive guards.
+- **HOW to do**: Production-grade Windows Shell reliability (PowerShell 5.1/7+, CMD, Win32) and Linux/WSL2 Bash execution, quoting, escaping, call operator `&`, UTF-8 byte preservation, elevation handling, and non-interactive guards.
 - **WHEN to do**: System state guards, precondition verification, dependency topological sorting, and idempotency checks (skipping already-satisfied states).
 - **WHY to do**: Transparent semantic rationale explaining command selection, switch choices, Windows quirk mitigations, and why alternatives were rejected.
 - **WHAT WILL HAPPEN AFTER (and How & Why)**: Pre-execution predictive state diff simulation (files, registry, services, processes, ports), safety risk tiering, automated rollback synthesis, post-condition verification, and autonomous error self-healing.
@@ -26,23 +29,26 @@ Most AI agents running on Windows fail because they rely on fragile shell wrappe
 |:---|:---:|:---:|:---:|:---:|
 | **5W Cognitive Pipeline** (What, How, When, Why, After) | ❌ None | ❌ None | ❌ None | ✅ **Built-in Epistemological Model** |
 | **Windows Shell Reliability** (Quoting, `&`, UTF-8, non-interactive) | ❌ Frequent crashes & hangs | ❌ N/A | ❌ Broken path & syntax | ✅ **Strict Automated Synthesis** |
+| **Linux & WSL2 Subsystem** | ❌ None | ❌ None | ⚠️ Fragile & unconstrained | ✅ **Deterministic Safety & Self-Healing** |
 | **Interactive Desktop GUI Control** | ❌ Terminal only | ⚠️ Blind pixel coordinate guesses | ❌ Headless only | ✅ **Native UI Automation Trees + Bounds** |
 | **Input Queue Safety** | ❌ None | ⚠️ Freezes cursor/queue on crash | ❌ None | ✅ **Guaranteed `try...finally` Release** |
-| **Autonomous Error Self-Healing** | ❌ Manual debugging required | ❌ None | ❌ None | ✅ **100+ HRESULT & Win32 Error Catalog** |
+| **Autonomous Error Self-Healing** | ❌ Manual debugging required | ❌ None | ❌ None | ✅ **100+ HRESULT, Win32 & POSIX Catalog** |
 | **Knowledge Graph & Hallucination Defense** | ❌ Frequent flag hallucinations | ❌ None | ❌ None | ✅ **10,374-Node Graph with 3 Datasets** |
-| **Model Context Protocol (MCP)** | ❌ None | ❌ None | ❌ None | ✅ **32 Production Tools + System Prompts** |
+| **Multi-Agent Coexistence Coordinator** | ❌ Session stomping & collisions | ❌ None | ❌ None | ✅ **Resource Locks & Shared Ledgers** |
+| **Model Context Protocol (MCP)** | ❌ None | ❌ None | ❌ None | ✅ **37 Production Tools + System Prompts** |
 
 ---
 
 ## Universal Agent Ecosystem Compatibility
 
 WinTerM connects out of the box with any AI agent framework:
-- 🤖 **Claude Code**: 1-command setup via `claude mcp add winterm python -m winterm.tools.mcp_server` (native `CLAUDE.md` and `.claude/skills/winterm/` included).
-- 🧩 **OpenCode**: Native `opencode.json` and `OPENCODE.md` integration for local open-source agent runs.
-- ⚡ **Google Antigravity**: Deep agent pair-programming, tool calling, and session ledger tracking.
+- 🤖 **Claude Code**: 1-command setup via `claude mcp add winterm python -m winterm.tools.mcp_server` (native [`CLAUDE.md`](CLAUDE.md) and custom skills in [`.claude/skills/winterm/`](.claude/skills/winterm/)).
+- 🧩 **OpenCode**: Native [`opencode.json`](opencode.json) and [`OPENCODE.md`](OPENCODE.md) integration for local open-source agent execution.
+- ⚡ **Google Gemini & Antigravity**: Native [`GEMINI.md`](GEMINI.md) operating manual with multimodal visual perception grounding (`winterm_screen_capture`).
+- 🧠 **DeepSeek (V3 & R1)**: Native [`DEEPSEEK.md`](DEEPSEEK.md) integration aligning R1 `<think>` reasoning tokens with the 5W cognitive pipeline.
 - 💻 **Cursor & Windsurf**: Terminal command synthesis and safe background desktop execution.
 - 🌐 **LangChain, CrewAI & AutoGen**: Python SDK tool wrappers for multi-agent swarms.
-- 🧠 **OpenAI Swarm & Assistants**: Exported OpenAI-compatible function calling schemas.
+- 🤝 **Simultaneous Multi-Agent Coexistence**: Cooperative resource locking and shared session coordination via `AgentSessionCoordinator`.
 
 
 ---
@@ -97,6 +103,7 @@ WinTerM covers the complete hierarchy of Windows Terminal operations and desktop
 | **Layer 7: Diagnostics & Health** | `DiagnosticsHealthSubsystem` | Windows Event Log (`Get-WinEvent`), real-time performance counters (`Get-Counter`), System File Checker (`sfc /scannow`), and DISM servicing (`dism /CheckHealth`). |
 | **Layer 8: Virtualization & Packages** | `VirtualizationPackagesSubsystem` | WSL distributions lifecycle (`wsl.exe -l -v`), Hyper-V virtual machines (`Get-VM`), Windows Optional Features, and package managers (`winget`, `choco`, `scoop`). |
 | **Layer 9: Desktop GUI & Interaction** | `DesktopGuiSubsystem` | Universal application discovery (`shell:AppsFolder`, Start Menu, Registry), window management (`EnumDesktopWindows`, `ForceForeground`), UI Automation (`InvokePattern`, `ValuePattern`), and keyboard/mouse/pen input automation. |
+| **Layer 10: Linux & WSL2** | `LinuxSubsystem` | Full Linux POSIX compatibility, systemctl daemon control, process/storage/network inspection, non-interactive package management (`apt`/`dnf`/`apk`/`pacman`), and bidirectional path translation (`wslpath`). |
 
 
 ---
@@ -305,7 +312,7 @@ Add to your `mcp_config.json` or Claude Desktop configuration:
 }
 ```
 
-### Exposed MCP Tools (32 Total):
+### Exposed MCP Tools (37 Total):
 
 #### 1. Core Execution & 5W Cognitive Engine (7 Tools)
 - `plan_terminal_task`: Decomposes natural language goals into staged Directed Acyclic Graph (DAG) execution plans.
@@ -316,7 +323,14 @@ Add to your `mcp_config.json` or Claude Desktop configuration:
 - `query_windows_knowledge`: Searches the internal Windows knowledge base for command syntax, shell rules, and environment pitfalls.
 - `undo_last_terminal_action`: Reverts the last state-modifying action from the rollback history stack.
 
-#### 2. Knowledge Graph & Semantic Reasoning (8 Tools)
+#### 2. Linux & WSL2 Subsystem (5 Tools)
+- `winterm_linux_execute`: Executes bash / POSIX commands with deterministic safety guard checks, non-interactive flags, and self-healing.
+- `winterm_linux_path_convert`: Bidirectional path conversion between Windows format (`C:\...`) and Linux format (`/mnt/c/...`).
+- `winterm_linux_distro_list`: Queries installed WSL distributions, running states, and default distro.
+- `winterm_linux_safety_check`: Deterministic safety analysis blocking destructive commands (`rm -rf /`, raw disk writes, fork bombs).
+- `winterm_linux_diagnose_error`: POSIX and Linux error diagnosis covering exit codes 127, 126, 137 OOM, EADDRINUSE, and dpkg locks.
+
+#### 3. Knowledge Graph & Semantic Reasoning (8 Tools)
 - `winterm_graph_blast_radius`: Cascading blast radius analysis (direct + transitive dependent services) with risk scoring.
 - `winterm_graph_validate_command`: Validates command flags against the 10,374-node Knowledge Graph to catch hallucinations and suggest typos.
 - `winterm_graph_remedy_error`: Resolves multi-step error recovery paths for Windows HRESULTs and Win32 codes.
@@ -326,19 +340,19 @@ Add to your `mcp_config.json` or Claude Desktop configuration:
 - `winterm_graph_command_docs`: Official Microsoft documentation, syntax, and parameter dictionaries for 144+ Windows binaries.
 - `winterm_graph_safety_check`: Evaluates command safety tier, credential sensitivity, and security warnings.
 
-#### 3. Universal Application Discovery, Lifecycle & Dynamic Learning (4 Tools)
+#### 4. Universal Application Discovery, Lifecycle & Dynamic Learning (4 Tools)
 - `winterm_app_find`: Discovers installed applications across `shell:AppsFolder`, Start Menu shortcuts, and Uninstall registry keys.
 - `winterm_app_launch`: Universally launches any Windows application (Win32 executable, UWP/AUMID Store app, or protocol URI).
 - `winterm_app_close`: Gracefully closes (`WM_CLOSE`/`CloseMainWindow`) or forcefully terminates processes.
 - `winterm_app_learn`: Probes local CLI help (`--help`, `/?`), parses parameter switches, and queries Knowledge Graph for usage patterns.
 
-#### 4. Window Management & Focus Automation (4 Tools)
+#### 5. Window Management & Focus Automation (4 Tools)
 - `winterm_window_list`: Enumerates all visible top-level desktop windows with handles (HWND), titles, PIDs, bounds, and states.
 - `winterm_window_focus`: Unlocks Windows UIPI focus locks, attaches input threads, and brings target windows to the foreground.
 - `winterm_window_resize`: Repositions and resizes application windows to deterministic coordinates and dimensions.
 - `winterm_window_close`: Sends native Win32 `WM_CLOSE` messages to gracefully close windows without terminating background threads.
 
-#### 5. UI Automation, Perception & Input Synthesis (9 Tools)
+#### 6. UI Automation, Perception & Input Synthesis (9 Tools)
 - `winterm_ui_inspect`: Traverses Windows UI Automation element trees (buttons, inputs, menus, list items) with bounding box geometry.
 - `winterm_ui_click`: Invokes elements via native `InvokePattern` with mouse coordinate fallback.
 - `winterm_ui_set_text`: Sets text in edit/input controls via native `ValuePattern` with SendKeys fallback.

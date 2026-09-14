@@ -6,30 +6,35 @@ from pydantic import BaseModel, Field
 
 
 class ShellType(str, Enum):
-    """Supported Windows shell environments."""
+    """Supported Windows and Linux shell environments."""
     POWERSHELL_51 = "powershell_51"  # Windows PowerShell 5.1 Desktop (default on Win 10/11)
     POWERSHELL_7 = "pwsh"            # PowerShell 7+ Core (cross-platform / modern)
     CMD = "cmd"                      # Classic Windows Command Prompt (cmd.exe)
-    WSL_BASH = "wsl_bash"            # Windows Subsystem for Linux (bash)
+    WSL_BASH = "wsl_bash"            # Windows Subsystem for Linux (bash via wsl.exe)
+    BASH = "bash"                    # Native Bash (Linux / macOS / Git Bash)
+    SH = "sh"                        # POSIX standard sh
     AUTO = "auto"                    # Automatically pick the most appropriate shell
 
 
 class ElevationLevel(str, Enum):
     """Execution privilege levels."""
     STANDARD = "standard"            # Normal standard user privileges
-    ADMIN = "admin"                  # Elevated Administrator (UAC token)
-    SYSTEM = "system"                # NT AUTHORITY\SYSTEM service account
+    ADMIN = "admin"                  # Elevated Administrator / root (UAC / sudo)
+    SYSTEM = "system"                # NT AUTHORITY\SYSTEM or root daemon account
 
 
 class SystemContext(BaseModel):
-    """Snapshot of the host Windows environment."""
+    """Snapshot of the host Windows or Linux environment."""
     os_name: str = Field(default="Windows", description="Operating system name")
-    os_release: str = Field(default="", description="Windows release (e.g. 10, 11)")
-    os_build: str = Field(default="", description="Windows build number (e.g. 26100)")
+    os_release: str = Field(default="", description="Windows release (e.g. 10, 11) or Linux kernel version")
+    os_build: str = Field(default="", description="Windows build number or Linux build info")
     architecture: str = Field(default="x64", description="CPU Architecture (x64, ARM64, x86)")
     powershell_version: str = Field(default="5.1", description="Installed PowerShell version")
     pwsh_available: bool = Field(default=False, description="Whether PowerShell 7 (pwsh) is installed")
     wsl_available: bool = Field(default=False, description="Whether WSL is installed and enabled")
+    is_wsl: bool = Field(default=False, description="Whether the current process is running inside WSL")
+    is_linux_host: bool = Field(default=False, description="Whether the host OS is Linux")
+    linux_distro: str = Field(default="", description="Detected Linux distribution name (e.g. Ubuntu, Debian, Fedora)")
     current_elevation: ElevationLevel = Field(
         default=ElevationLevel.STANDARD,
         description="Current user elevation level"

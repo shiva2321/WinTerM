@@ -45,6 +45,12 @@ class WindowsShellExecutor:
         elif target_shell == ShellType.CMD:
             sanitized_cmd = ReliabilityRules.make_non_interactive(command)
             cmd_args = ShellMatrix.build_command_args(target_shell, sanitized_cmd)
+        elif target_shell in (ShellType.WSL_BASH, ShellType.BASH):
+            from winterm.knowledge.linux_safety import LinuxSafetyGuard
+            sanitized_cmd = LinuxSafetyGuard.make_non_interactive(command)
+            # Wrap with strict pipefail and non-interactive environment
+            script_body = f"set -eo pipefail; export DEBIAN_FRONTEND=noninteractive; {sanitized_cmd}"
+            cmd_args = ShellMatrix.build_command_args(target_shell, script_body)
         else:
             # Fallback direct execution
             cmd_args = ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", command]

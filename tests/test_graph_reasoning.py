@@ -248,6 +248,59 @@ def test_safety_classification_evaluation(kg):
     assert safe_safety["is_dangerous"] is False
 
 
+def test_safety_guard_never_fails_open_on_destructive_commands(kg):
+    """Deterministic SafetyGuard must catch destructive commands even when the
+    sparse SFT graph rules do not match (previously they fell through to 'safe')."""
+    destructive_commands = [
+        "Remove-Item -Recurse -Force C:\\Windows\\System32",
+        "Stop-Computer -Force",
+        "Restart-Computer -Force",
+        "Remove-Item C:\\temp\\old.txt",
+        "del /q /f C:\\boot.ini",
+        "shutdown /r /t 0",
+        "rmdir /s /q C:\\Windows",
+        "reg delete HKLM\\Software\\Test /f",
+        "Format-Volume -DriveLetter C",
+        "Clear-RecycleBin -Force",
+        "takeown /F C:\\Windows\\System32\\cmd.exe /A",
+        "diskpart",
+    ]
+    for cmd in destructive_commands:
+        result = kg.get_safety_classification(cmd)
+        assert result["is_dangerous"] is True, f"FAILED to flag as dangerous: {cmd}"
+        assert result["safety_label"] in ("destructive", "credential_sensitive", "privileged")
+
+    # Read-only queries must remain safe (no false positives).
+    safe_commands = [
+        "Get-Process",
+        "Get-Service | Select-Object Name, Status",
+        "Get-ChildItem C:\\Windows",
+        "whoami /priv",
+        "Get-NetTCPConnection -LocalPort 8080",
+        "Get-Volume",
+        "ping google.com",
+        "ipconfig /all",
+        "Get-EventLog -LogName System -Newest 10",
+        "netstat -ano",
+    ]
+    for cmd in safe_commands:
+        result = kg.get_safety_classification(cmd)
+        assert result["is_dangerous"] is False, f"FALSE POSITIVE: {cmd} -> {result}"
+
+
+def test_safety_guard_privileged_classification(kg):
+    """Privileged operations are flagged dangerous but with privilege rationale."""
+    privileged = [
+        "New-NetFirewallRule -DisplayName test -Direction Inbound -Protocol TCP",
+        "Enable-BitLocker -MountPoint C:",
+        "Set-ExecutionPolicy RemoteSigned",
+    ]
+    for cmd in privileged:
+        result = kg.get_safety_classification(cmd)
+        assert result["is_dangerous"] is True, f"FAILED to flag privileged: {cmd}"
+        assert result["safety_label"] == "privileged"
+
+
 def test_agent_hf_convenience_methods(agent):
     """Agent methods for search_intent, get_command_docs, and check_command_safety work."""
     # Search intent
@@ -278,7 +331,7 @@ def test_impact_predictor_safety_enrichment(agent):
     )
     impact = agent.predictor.predict_step_impact(step)
     assert impact.risk_level.value in ("high_destructive", "medium")
-    assert any("Knowledge Graph Safety Alert" in w for w in impact.warnings)
+    assert any("Safety Guard Alert" in w for w in impact.warnings)
 
 
 def test_mcp_server_hf_tools():
@@ -376,12 +429,12 @@ def test_mcp_server_claude_and_opencode_protocol():
     assert res_resp["id"] == 3
     assert "resources" in res_resp["result"]
 
-    # 5. tools/list (all 32 tools with valid inputSchemas)
+    # 5. tools/list (all 37 tools with valid inputSchemas)
     tools_req = {"jsonrpc": "2.0", "id": 4, "method": "tools/list"}
     tools_resp = server.handle_request(tools_req)
     assert tools_resp["id"] == 4
     tools = tools_resp["result"]["tools"]
-    assert len(tools) == 32
+    assert len(tools) == 37
     assert all("name" in t and "inputSchema" in t for t in tools)
 
 

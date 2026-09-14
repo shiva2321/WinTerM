@@ -10,6 +10,7 @@ from winterm.subsystems.network_firewall import NetworkFirewallSubsystem
 from winterm.subsystems.diagnostics_health import DiagnosticsHealthSubsystem
 from winterm.subsystems.virtualization_packages import VirtualizationPackagesSubsystem
 from winterm.subsystems.desktop_gui import DesktopGuiSubsystem
+from winterm.subsystems.linux_subsystem import LinuxSubsystem
 
 __all__ = [
     "KernelBootSubsystem",
@@ -22,4 +23,5 @@ __all__ = [
     "DiagnosticsHealthSubsystem",
     "VirtualizationPackagesSubsystem",
     "DesktopGuiSubsystem",
+    "LinuxSubsystem",
 ]

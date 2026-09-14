@@ -155,6 +155,7 @@ def run(
     goal: str = typer.Argument(..., help="Goal to plan and execute"),
     dry_run: bool = typer.Option(False, "--dry-run", "-d", help="Simulate execution without running commands"),
     auto_heal: bool = typer.Option(True, "--auto-heal/--no-auto-heal", help="Automatically attempt healing on failure"),
+    confirm_high_risk: bool = typer.Option(False, "--confirm-high-risk", help="Allow high-risk/destructive commands to execute (DANGEROUS)"),
 ):
     """Plans, explains, executes, and verifies a goal on Windows Terminal."""
     agent = WinTermAgent()
@@ -165,7 +166,9 @@ def run(
 
     for step in plan_obj.steps:
         console.print(Panel(f"[bold]Executing:[/bold] {step.title}\n[dim]{step.command}[/dim]", title=step.step_id))
-        res, verif, trace = agent.execute_step(step, dry_run=dry_run, auto_heal=auto_heal)
+        res, verif, trace = agent.execute_step(
+            step, dry_run=dry_run, auto_heal=auto_heal, confirm_high_risk=confirm_high_risk
+        )
 
         if res.success:
             console.print(f"[bold green][OK] Success[/bold green] in {res.duration_ms}ms")
@@ -478,7 +481,7 @@ def graph_safety(
         f"[bold]Skill Category:[/bold] {escape(safety['skill'])}\n"
         f"[bold]Dangerous / High Risk:[/bold] {safety['is_dangerous']}\n"
         f"[bold]Warning / Rationale:[/bold] {escape(safety['warning'] or 'Standard operation; no special risk flagged.')}",
-        title="SFT Safety Evaluation",
+        title="Safety Evaluation (Guard + SFT)",
         border_style="red" if safety["is_dangerous"] else "green",
     ))
 

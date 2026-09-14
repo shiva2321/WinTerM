@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "winterm"
-version = "0.3.0"
-description = "WinTerM: The AI Agent Toolkit for Windows Terminal & Desktop. 5W Cognitive Model, 10-Layer Subsystems, 32 MCP Tools & UI Automation."
+version = "0.4.0"
+description = "WinTerM: The AI Agent Toolkit for Windows Terminal, Desktop & Linux/WSL2. 5W Cognitive Model, 11-Layer Subsystems, 37 MCP Tools, DeepSeek/Gemini/Claude Support & Multi-Agent Coexistence."
 readme = "README.md"
 license = { text = "MIT" }
 authors = [
@@ -16,8 +16,11 @@ keywords = [
     "mcp",
     "model-context-protocol",
     "windows-terminal",
+    "linux-wsl",
     "desktop-automation",
     "claude-code",
+    "deepseek",
+    "gemini",
     "powershell",
     "ui-automation",
     "agent-toolkit"

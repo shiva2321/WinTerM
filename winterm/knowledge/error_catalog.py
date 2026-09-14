@@ -183,4 +183,18 @@ class WindowsErrorCatalog:
                     requires_elevation=diagnosis.requires_elevation,
                 )
 
+        # Fallback to Linux / POSIX error catalog
+        try:
+            from winterm.knowledge.linux_errors import LinuxErrorCatalog
+            linux_diag = LinuxErrorCatalog.diagnose(
+                stdout=stdout,
+                stderr=stderr,
+                exit_code=exit_code,
+                failed_command=failed_command,
+            )
+            if linux_diag:
+                return linux_diag
+        except Exception:
+            pass
+
         return None

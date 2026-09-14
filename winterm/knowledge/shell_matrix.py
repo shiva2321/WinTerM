@@ -66,11 +66,50 @@ class ShellMatrix:
                 "Primitive error handling via %errorlevel%",
             ],
         },
+        ShellType.WSL_BASH: {
+            "name": "Windows Subsystem for Linux (WSL Bash)",
+            "binary": "wsl.exe",
+            "flags": ["-e", "bash", "-c"],
+            "native_objects": False,
+            "pipeline_chain_operators": True,
+            "default_output_encoding": "UTF-8",
+            "redirection_byte_safe": True,
+            "strengths": [
+                "Full Linux POSIX compatibility on Windows",
+                "Access to native Linux toolchains (gcc, docker, apt, valgrind)",
+                "Seamless access to /mnt/c Windows filesystem",
+            ],
+            "limitations": [
+                "WSL service must be running",
+                "Path conversion required between C:\\ and /mnt/c",
+            ],
+        },
+        ShellType.BASH: {
+            "name": "Native Bash (Linux / macOS / Git Bash)",
+            "binary": "bash",
+            "flags": ["-c"],
+            "native_objects": False,
+            "pipeline_chain_operators": True,
+            "default_output_encoding": "UTF-8",
+            "redirection_byte_safe": True,
+            "strengths": [
+                "Universal standard across all Linux distributions",
+                "Standard POSIX pipes and redirection",
+                "Fast native subprocess execution",
+            ],
+            "limitations": [
+                "Not available natively on Windows without WSL or Git Bash",
+            ],
+        },
     }
 
     @classmethod
     def recommend_shell(cls, category: str, command_intent: str, pwsh_installed: bool = False) -> ShellType:
         """Determines the most reliable shell for a given task category and intent."""
+        # Linux / WSL explicit categories
+        if category in ("linux", "wsl", "posix"):
+            return ShellType.WSL_BASH
+
         # Structured system queries prefer PowerShell
         structured_categories = {
             "service", "registry", "diagnostic", "network", "process", "environment"
@@ -93,6 +132,10 @@ class ShellMatrix:
             return shutil.which("pwsh") or "pwsh.exe"
         elif shell == ShellType.CMD:
             return shutil.which("cmd") or r"C:\Windows\System32\cmd.exe"
+        elif shell == ShellType.WSL_BASH:
+            return shutil.which("wsl") or r"C:\Windows\System32\wsl.exe"
+        elif shell == ShellType.BASH:
+            return shutil.which("bash") or "bash"
         else:
             return shutil.which("powershell") or r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
 

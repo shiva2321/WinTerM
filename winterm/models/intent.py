@@ -33,6 +33,7 @@ class StepStatus(str, Enum):
     SUCCEEDED = "succeeded"
     FAILED = "failed"
     ROLLED_BACK = "rolled_back"
+    REFUSED = "refused"
 
 
 class PlanStep(BaseModel):

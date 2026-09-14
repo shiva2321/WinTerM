@@ -22,6 +22,7 @@ class SessionStepRecord(BaseModel):
 class AgentSession(BaseModel):
     """Maintains conversation context, executed history, and rollback stack for WinTermAgent."""
     session_id: str
+    agent_framework: str = Field(default="generic", description="Agent runtime identifier (e.g. claude-code, opencode, gemini, deepseek)")
     active_plan: Optional[ExecutionPlan] = None
     history: List[SessionStepRecord] = Field(default_factory=list)
     rollback_stack: List[RollbackAction] = Field(default_factory=list)
@@ -59,3 +60,90 @@ class AgentSession(BaseModel):
             with open(filepath, "w", encoding="utf-8") as f:
                 f.write(json_data)
         return json_data
+
+
+class ResourceLock(BaseModel):
+    """Represents a cooperative lock held by an agent on a shared resource."""
+    resource_id: str
+    owner_session_id: str
+    owner_framework: str
+    acquired_at: float = Field(default_factory=time.time)
+    expires_at: float
+
+
+class AgentSessionCoordinator:
+    """Coordinates simultaneous agent sessions (Claude Code, OpenCode, DeepSeek, Gemini) and prevents collisions."""
+
+    _sessions: Dict[str, AgentSession] = {}
+    _locks: Dict[str, ResourceLock] = {}
+
+    @classmethod
+    def register_session(cls, session: AgentSession) -> None:
+        """Registers an active agent session in the coordinator registry."""
+        cls._sessions[session.session_id] = session
+
+    @classmethod
+    def get_active_sessions(cls) -> List[Dict[str, Any]]:
+        """Returns metadata of all currently registered agent sessions."""
+        return [
+            {
+                "session_id": s.session_id,
+                "agent_framework": s.agent_framework,
+                "steps_executed": len(s.history),
+                "has_active_plan": s.active_plan is not None,
+            }
+            for s in cls._sessions.values()
+        ]
+
+    @classmethod
+    def acquire_resource_lock(
+        cls,
+        resource_id: str,
+        session_id: str,
+        framework: str = "generic",
+        ttl_seconds: float = 60.0,
+    ) -> bool:
+        """Acquires a cooperative lock on a shared resource (window, port, file) for an agent session."""
+        cls.clean_expired_locks()
+        now = time.time()
+
+        if resource_id in cls._locks:
+            lock = cls._locks[resource_id]
+            # Re-entrant for the same session
+            if lock.owner_session_id == session_id:
+                lock.expires_at = now + ttl_seconds
+                return True
+            return False
+
+        cls._locks[resource_id] = ResourceLock(
+            resource_id=resource_id,
+            owner_session_id=session_id,
+            owner_framework=framework,
+            acquired_at=now,
+            expires_at=now + ttl_seconds,
+        )
+        return True
+
+    @classmethod
+    def release_resource_lock(cls, resource_id: str, session_id: str) -> bool:
+        """Releases a cooperative resource lock held by the specified session."""
+        if resource_id in cls._locks:
+            if cls._locks[resource_id].owner_session_id == session_id:
+                del cls._locks[resource_id]
+                return True
+        return False
+
+    @classmethod
+    def is_resource_locked(cls, resource_id: str) -> Optional[ResourceLock]:
+        """Checks if a resource is currently locked by another active agent."""
+        cls.clean_expired_locks()
+        return cls._locks.get(resource_id)
+
+    @classmethod
+    def clean_expired_locks(cls) -> int:
+        """Removes expired locks and returns the count of purged locks."""
+        now = time.time()
+        expired = [k for k, v in cls._locks.items() if v.expires_at < now]
+        for k in expired:
+            del cls._locks[k]
+        return len(expired)
