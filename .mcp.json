@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "winterm": {
+      "command": "python",
+      "args": ["-m", "winterm.tools.mcp_server"]
+    }
+  }
+}

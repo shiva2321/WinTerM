@@ -224,16 +224,20 @@ class SafetyGuard:
             return None
         low = cmd.lower()
 
-        # 1. Read-only queries are never dangerous.
-        if self._matches_any(READ_ONLY_VERBS, low):
-            return SafetyVerdict(
-                label="safe",
-                is_dangerous=False,
-                skill="diagnostics",
-                warning="Read-only query. No system state modified.",
-            )
+        # NOTE: destructive/privileged/network checks run BEFORE the read-only
+        # check. A pipeline such as
+        #   Get-Service | Where-Object {$_.Status -eq 'Stopped'} | Stop-Computer -Force
+        # contains a read-only verb (Get-Service) *and* a destructive one
+        # (Stop-Computer). If the read-only check ran first it would
+        # short-circuit to "safe" and the destructive tail of the pipeline
+        # would never be evaluated -- exactly the fail-open behaviour this
+        # guard exists to prevent, and (confirmed empirically against
+        # WinTermAgent.execute_step()) it silently defeats the confirm_high_risk
+        # safety gate for this class of command: risk_level stays READ_ONLY,
+        # so the gate never triggers and the command runs unconfirmed. Severity
+        # must win over position in the command string.
 
-        # 2. Destructive verb against protected path -> destructive.
+        # 1. Destructive verb against protected path -> destructive.
         for verb_pat in DESTRUCTIVE_VERBS:
             if verb_pat.search(low):
                 target = self._find_protected_target(low)
@@ -295,6 +299,17 @@ class SafetyGuard:
                     skill="networking",
                     matched_pattern=verb_pat.pattern,
                 )
+
+        # 6. Read-only queries are safe -- but only once nothing more severe
+        # matched above, so a piped destructive tail can never hide behind a
+        # read-only head.
+        if self._matches_any(READ_ONLY_VERBS, low):
+            return SafetyVerdict(
+                label="safe",
+                is_dangerous=False,
+                skill="diagnostics",
+                warning="Read-only query. No system state modified.",
+            )
 
         return None
 

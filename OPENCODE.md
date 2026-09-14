@@ -37,3 +37,4 @@ WinTerM provides 32 production-grade MCP tools configured in `opencode.json`:
 2. **Focus Before Typing**: Always bring the target window to the foreground via `winterm_window_focus` before injecting keystrokes.
 3. **Verify State Transitions**: After performing an action, confirm success with `winterm_ui_inspect` or `winterm_screen_capture`.
 4. **Never Write Hardcoded Scripts**: Avoid writing temporary `.py` scripts containing hardcoded pixel coordinates or assumptions about system paths.
+5. **Target by Handle (HWND), Not Title, After the First Lookup**: Window titles can change dynamically (unsaved-changes markers, the document's own content appearing in the title), so a title matched in step 1 can stop matching a few steps later in the same task. `winterm_window_list`/`winterm_ui_inspect` return a numeric `Handle` -- reuse that Handle for every subsequent call in the task instead of re-matching by title.

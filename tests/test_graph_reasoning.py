@@ -301,6 +301,42 @@ def test_safety_guard_privileged_classification(kg):
         assert result["safety_label"] == "privileged"
 
 
+def test_safety_guard_does_not_hide_destructive_tail_behind_readonly_head(kg):
+    """A pipeline that starts with a read-only verb but ends with a destructive
+    one must still be flagged dangerous.
+
+    Regression for: SafetyGuard.classify() checked READ_ONLY_VERBS before
+    DESTRUCTIVE_VERBS, so ``Get-ChildItem ... | Remove-Item -Force`` matched
+    the read-only 'get-' pattern first and returned 'safe' without ever
+    inspecting the destructive 'remove-item' tail of the pipeline -- the
+    exact fail-open behavior this guard exists to prevent, and (confirmed
+    end-to-end against WinTermAgent.execute_step()) a silent bypass of the
+    confirm_high_risk safety gate for this class of command: risk_level
+    stayed READ_ONLY, so the gate never triggered and the command would run
+    unconfirmed. One of the most common real-world dangerous PowerShell
+    idioms (find-then-delete / find-then-shutdown).
+    """
+    piped_destructive = [
+        r'Get-ChildItem -Path C:\Windows\System32 -Recurse | '
+        r'Where-Object {$_.Name -like "*.log"} | Remove-Item -Force',
+        r'Get-Item C:\temp\file.txt | Remove-Item',
+        r'Get-ChildItem C:\ -Recurse | Remove-Item -Force -Recurse',
+        "Get-Service | Where-Object {$_.Status -eq 'Stopped'} | Stop-Computer -Force",
+    ]
+    for cmd in piped_destructive:
+        result = kg.get_safety_classification(cmd)
+        assert result["is_dangerous"] is True, (
+            f"Destructive pipeline hid behind a read-only head verb: {cmd} -> {result}"
+        )
+        assert result["safety_label"] == "destructive"
+
+    # Plain read-only commands (no destructive verb anywhere) must remain safe.
+    still_safe = ["Get-ChildItem C:\\Windows", "Get-Process", "Get-Service"]
+    for cmd in still_safe:
+        result = kg.get_safety_classification(cmd)
+        assert result["is_dangerous"] is False, f"FALSE POSITIVE: {cmd} -> {result}"
+
+
 def test_agent_hf_convenience_methods(agent):
     """Agent methods for search_intent, get_command_docs, and check_command_safety work."""
     # Search intent

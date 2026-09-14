@@ -52,6 +52,51 @@ def test_safety_gate_refuses_destructive_without_confirmation():
     assert res.exit_code == -100
 
 
+def test_safety_gate_refuses_destructive_command_piped_behind_readonly_head():
+    """Regression: a pipeline starting with a read-only verb but ending in a
+    destructive one must still be refused by the safety gate.
+
+    SafetyGuard.classify() (winterm/knowledge/safety_guard.py) checked
+    READ_ONLY_VERBS before DESTRUCTIVE_VERBS, so a command like
+    ``Get-Service | Where-Object {...} | Stop-Computer -Force`` matched the
+    read-only 'get-' pattern first and was classified 'safe' without the
+    destructive Stop-Computer tail ever being evaluated. Verified empirically
+    end-to-end before this fix: predict_step_impact() reported
+    RiskLevel.READ_ONLY with no warnings, so execute_step() never reached
+    the safety gate at all and the command would have run unconfirmed --
+    silently defeating the entire confirm_high_risk gate for this class of
+    command (find-then-shutdown/find-then-delete pipelines are one of the
+    most common real-world dangerous PowerShell idioms).
+    """
+    agent = WinTermAgent()
+    from winterm.models.intent import PlanStep, ActionCategory
+    from winterm.models.context import ShellType, ElevationLevel
+
+    piped_destructive = [
+        "Get-Service | Where-Object {$_.Status -eq 'Stopped'} | Stop-Computer -Force",
+        r'Get-ChildItem -Path C:\Windows\System32 -Recurse | Remove-Item -Force',
+    ]
+    for cmd in piped_destructive:
+        step = PlanStep(
+            step_id="piped-destructive-test",
+            title="Piped destructive command",
+            category=ActionCategory.CUSTOM,
+            raw_intent=cmd,
+            command=cmd,
+            target_shell=ShellType.POWERSHELL_51,
+            required_elevation=ElevationLevel.STANDARD,
+        )
+        impact = agent.predictor.predict_step_impact(step)
+        assert impact.risk_level == RiskLevel.HIGH_DESTRUCTIVE, (
+            f"Destructive pipeline tail not detected: {cmd} -> {impact.risk_level}"
+        )
+
+        res, verif, trace = agent.execute_step(step, dry_run=False, confirm_high_risk=False)
+        assert res.success is False, f"Safety gate failed to refuse: {cmd}"
+        assert "SAFETY GATE" in res.stderr
+        assert res.exit_code == -100
+
+
 def test_safety_gate_allows_safe_commands():
     """Read-only commands execute normally through the gate."""
     agent = WinTermAgent()
