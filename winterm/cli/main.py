@@ -79,7 +79,7 @@ def plan(
     agent = WinTermAgent()
     plan_obj = agent.plan(goal)
 
-    console.print(Panel(f"[bold cyan]Goal:[/bold cyan] {goal}\n[bold]Plan ID:[/bold] {plan_obj.plan_id}", title="Execution Plan"))
+    console.print(Panel(f"[bold cyan]Goal:[/bold cyan] {escape(goal)}\n[bold]Plan ID:[/bold] {escape(plan_obj.plan_id)}", title="Execution Plan"))
 
     table = Table(title=f"Staged Plan Steps ({len(plan_obj.steps)} total)", border_style="blue")
     table.add_column("Step", style="bold yellow")
@@ -123,29 +123,29 @@ def explain(
     trace = agent.explain(step)
     impact = agent.predictor.predict_step_impact(step)
 
-    console.print(Panel(f"[bold green]Command:[/bold green] {step.command}", title="5W Decision Trace"))
+    console.print(Panel(f"[bold green]Command:[/bold green] {escape(step.command)}", title="5W Decision Trace"))
 
     tree = Tree("[bold cyan]5W Cognitive Breakdown[/bold cyan]")
-    tree.add(f"[bold]1. WHAT:[/bold] {trace.what}")
-    tree.add(f"[bold]2. HOW:[/bold] {trace.how}")
+    tree.add(f"[bold]1. WHAT:[/bold] {escape(trace.what)}")
+    tree.add(f"[bold]2. HOW:[/bold] {escape(trace.how)}")
 
     when_branch = tree.add("[bold]3. WHEN (Preconditions & Guards):[/bold]")
     if trace.when:
         for chk in trace.when:
-            when_branch.add(f"- {chk.check_type.value}: {chk.target} (probe: `{chk.probe_command}`)")
+            when_branch.add(f"- {escape(chk.check_type.value)}: {escape(chk.target)} (probe: `{escape(chk.probe_command)}`)")
     else:
         when_branch.add("- Safe to execute unconditionally.")
 
     why_branch = tree.add("[bold]4. WHY (Semantic Justification):[/bold]")
-    why_branch.add(f"Justification: {trace.why.command_justification}")
+    why_branch.add(f"Justification: {escape(trace.why.command_justification)}")
     if trace.why.alternatives_rejected:
         for alt in trace.why.alternatives_rejected:
-            why_branch.add(f"Rejected: `{alt.alternative}` ({alt.reason})")
+            why_branch.add(f"Rejected: `{escape(alt.alternative)}` ({escape(alt.reason)})")
 
     after_branch = tree.add(f"[bold]5. AFTER (Impact & Risk: {impact.risk_level.value.upper()}):[/bold]")
-    after_branch.add(f"Summary: {trace.after}")
+    after_branch.add(f"Summary: {escape(trace.after)}")
     if impact.rollback:
-        after_branch.add(f"Rollback recipe: `{impact.rollback.command}`")
+        after_branch.add(f"Rollback recipe: `{escape(impact.rollback.command)}`")
 
     console.print(tree)
 
@@ -159,13 +159,14 @@ def run(
 ):
     """Plans, explains, executes, and verifies a goal on Windows Terminal."""
     agent = WinTermAgent()
-    console.print(f"[bold cyan]Planning goal:[/bold cyan] {goal}")
+    console.print(f"[bold cyan]Planning goal:[/bold cyan] {escape(goal)}")
 
     plan_obj = agent.plan(goal)
     console.print(f"Generated plan with {len(plan_obj.steps)} step(s). Starting execution...")
 
+    STDOUT_PREVIEW_CHARS = 200
     for step in plan_obj.steps:
-        console.print(Panel(f"[bold]Executing:[/bold] {step.title}\n[dim]{step.command}[/dim]", title=step.step_id))
+        console.print(Panel(f"[bold]Executing:[/bold] {escape(step.title)}\n[dim]{escape(step.command)}[/dim]", title=escape(step.step_id)))
         res, verif, trace = agent.execute_step(
             step, dry_run=dry_run, auto_heal=auto_heal, confirm_high_risk=confirm_high_risk
         )
@@ -173,18 +174,20 @@ def run(
         if res.success:
             console.print(f"[bold green][OK] Success[/bold green] in {res.duration_ms}ms")
             if res.stdout:
-                console.print(f"[dim]{res.stdout[:200]}[/dim]")
+                preview = res.stdout[:STDOUT_PREVIEW_CHARS]
+                suffix = f" … ({len(res.stdout) - STDOUT_PREVIEW_CHARS} more chars, truncated)" if len(res.stdout) > STDOUT_PREVIEW_CHARS else ""
+                console.print(f"[dim]{escape(preview)}[/dim]{escape(suffix)}")
             if verif:
-                console.print(f"[cyan]Verification:[/cyan] {verif.details}")
+                console.print(f"[cyan]Verification:[/cyan] {escape(verif.details)}")
         else:
             console.print(f"[bold red][X] Failed[/bold red] with exit code {res.exit_code}")
             if res.stderr:
-                console.print(f"[red]{res.stderr}[/red]")
+                console.print(f"[red]{escape(res.stderr)}[/red]")
             if res.healing_proposal:
                 console.print(Panel(
-                    f"Root Cause: {res.healing_proposal.root_cause}\n"
-                    f"Remedy: {res.healing_proposal.remedy_explanation}\n"
-                    f"Command: `{res.healing_proposal.healing_command}`",
+                    f"Root Cause: {escape(res.healing_proposal.root_cause)}\n"
+                    f"Remedy: {escape(res.healing_proposal.remedy_explanation)}\n"
+                    f"Command: `{escape(res.healing_proposal.healing_command)}`",
                     title="Self-Healing Proposal",
                     border_style="yellow"
                 ))
@@ -206,10 +209,10 @@ def diagnose(
 
     if proposal:
         console.print(Panel(
-            f"[bold]Error Signature:[/bold] {proposal.error_signature}\n"
-            f"[bold]Root Cause:[/bold] {proposal.root_cause}\n"
-            f"[bold]Remedy:[/bold] {proposal.remedy_explanation}\n"
-            f"[bold]Healing Command:[/bold] `{proposal.healing_command}`\n"
+            f"[bold]Error Signature:[/bold] {escape(proposal.error_signature)}\n"
+            f"[bold]Root Cause:[/bold] {escape(proposal.root_cause)}\n"
+            f"[bold]Remedy:[/bold] {escape(proposal.remedy_explanation)}\n"
+            f"[bold]Healing Command:[/bold] `{escape(proposal.healing_command)}`\n"
             f"[bold]Requires Elevation:[/bold] {proposal.requires_elevation}",
             title="[bold green]Diagnosis & Self-Healing Plan[/bold green]",
             border_style="green"
@@ -270,23 +273,23 @@ def graph_blast_radius(
 
     risk_style = "bold red" if report.risk_score in ("CRITICAL", "HIGH") else "bold green"
     console.print(Panel(
-        f"[bold]Target Entity:[/bold] {report.root_node_id}\n"
-        f"[bold]Assessed Risk:[/bold] [{risk_style}]{report.risk_score}[/{risk_style}]\n"
+        f"[bold]Target Entity:[/bold] {escape(report.root_node_id)}\n"
+        f"[bold]Assessed Risk:[/bold] [{risk_style}]{escape(report.risk_score)}[/{risk_style}]\n"
         f"[bold]Cascade Traversal Depth:[/bold] {report.blast_radius_depth}\n\n"
-        f"[bold]Executive Impact Summary:[/bold]\n{report.impact_summary}",
+        f"[bold]Executive Impact Summary:[/bold]\n{escape(report.impact_summary)}",
         title="Knowledge Graph Blast Radius Assessment",
         border_style="red" if report.risk_score == "CRITICAL" else "yellow",
     ))
 
-    tree = Tree(f"[bold red]Cascading Dependency Tree for {report.root_node_id}[/bold red]")
+    tree = Tree(f"[bold red]Cascading Dependency Tree for {escape(report.root_node_id)}[/bold red]")
     direct_branch = tree.add(f"[bold yellow]Direct Dependents ({len(report.direct_dependents)}):[/bold yellow]")
     for dep in report.direct_dependents:
-        direct_branch.add(f"[white]{dep}[/white]")
+        direct_branch.add(f"[white]{escape(dep)}[/white]")
 
     if report.cascading_dependents:
         cascade_branch = tree.add(f"[bold magenta]Transitive Cascading Dependents ({len(report.cascading_dependents)}):[/bold magenta]")
         for cdep in report.cascading_dependents:
-            cascade_branch.add(f"[white]{cdep}[/white]")
+            cascade_branch.add(f"[white]{escape(cdep)}[/white]")
 
     console.print(tree)
 
@@ -315,22 +318,22 @@ def graph_validate(
     if res.is_valid:
         console.print(Panel(
             f"[bold green][OK] Command and all {len(res.valid_parameters)} parameter(s) validated successfully![/bold green]\n"
-            f"Command: [cyan]{res.command}[/cyan]\n"
-            f"Valid parameters: [white]{', '.join(res.valid_parameters) or 'None specified'}[/white]",
+            f"Command: [cyan]{escape(res.command)}[/cyan]\n"
+            f"Valid parameters: [white]{escape(', '.join(res.valid_parameters)) or 'None specified'}[/white]",
             title="Parameter Hallucination Check Passed",
             border_style="green",
         ))
     else:
         warn_msg = f"[bold red][X] Hallucination / Invalid parameters detected![/bold red]\n"
-        warn_msg += f"Command: [cyan]{res.command}[/cyan]\n"
+        warn_msg += f"Command: [cyan]{escape(res.command)}[/cyan]\n"
         if res.valid_parameters:
-            warn_msg += f"Valid parameters: [green]{', '.join(res.valid_parameters)}[/green]\n"
+            warn_msg += f"Valid parameters: [green]{escape(', '.join(res.valid_parameters))}[/green]\n"
         if res.unknown_parameters:
-            warn_msg += f"Unknown / Invalid parameters: [bold red]{', '.join(res.unknown_parameters)}[/bold red]\n"
+            warn_msg += f"Unknown / Invalid parameters: [bold red]{escape(', '.join(res.unknown_parameters))}[/bold red]\n"
         if res.suggestions:
             warn_msg += "\n[bold yellow]Suggestions:[/bold yellow]\n"
             for unk, sug in res.suggestions.items():
-                warn_msg += f"  - For '{unk}' did you mean: [bold green]{sug}[/bold green]?\n"
+                warn_msg += f"  - For '{escape(unk)}' did you mean: [bold green]{escape(sug)}[/bold green]?\n"
 
         console.print(Panel(warn_msg, title="Validation Failed", border_style="red"))
 
@@ -345,13 +348,13 @@ def graph_remedy(
     path = kg.find_remediation_chains(error_code)
 
     if not path:
-        console.print(f"[yellow]No graph remediation path registered for '{error_code}'.[/yellow]")
+        console.print(f"[yellow]No graph remediation path registered for '{escape(error_code)}'.[/yellow]")
         return
 
     console.print(Panel(
-        f"[bold]Error Code:[/bold] {path.error_code}\n"
-        f"[bold]Root Cause:[/bold] {path.root_cause}\n"
-        f"[bold]Required Privileges:[/bold] {', '.join(path.required_privileges)}",
+        f"[bold]Error Code:[/bold] {escape(path.error_code)}\n"
+        f"[bold]Root Cause:[/bold] {escape(path.root_cause)}\n"
+        f"[bold]Required Privileges:[/bold] {escape(', '.join(path.required_privileges))}",
         title="Knowledge Graph Error Remediation Chain",
         border_style="cyan",
     ))
@@ -366,9 +369,9 @@ def graph_remedy(
         cond = s.get("condition") or s.get("expected") or "Unconditional"
         t_steps.add_row(
             str(s.get("step", "-")),
-            s.get("action", ""),
-            s.get("command", ""),
-            str(cond),
+            escape(s.get("action", "")),
+            escape(s.get("command", "")),
+            escape(str(cond)),
         )
     console.print(t_steps)
 
@@ -384,13 +387,13 @@ def graph_alternatives(
 
     if alts:
         console.print(Panel(
-            f"[bold]Target Command:[/bold] {command}\n"
-            f"[bold green]Registered Alternatives:[/bold green] {', '.join(alts)}",
+            f"[bold]Target Command:[/bold] {escape(command)}\n"
+            f"[bold green]Registered Alternatives:[/bold green] {escape(', '.join(alts))}",
             title="Command Alternatives",
             border_style="green",
         ))
     else:
-        console.print(f"[yellow]No alternative commands cross-linked for '{command}'.[/yellow]")
+        console.print(f"[yellow]No alternative commands cross-linked for '{escape(command)}'.[/yellow]")
 
 
 @graph_app.command("search-intent")
@@ -404,10 +407,10 @@ def graph_search_intent(
     results = kg.resolve_intent_to_commands(query, top_k=top_k)
 
     if not results:
-        console.print(f"[yellow]No close matching Windows intents found for '{query}'.[/yellow]")
+        console.print(f"[yellow]No close matching Windows intents found for '{escape(query)}'.[/yellow]")
         return
 
-    table = Table(title=f"Matched Windows Intents for '{query}'", border_style="cyan")
+    table = Table(title=f"Matched Windows Intents for '{escape(query)}'", border_style="cyan")
     table.add_column("#", style="bold yellow")
     table.add_column("Natural Language Instruction", style="white")
     table.add_column("Concrete Command", style="green")
@@ -437,7 +440,7 @@ def graph_docs(
     docs = kg.get_command_documentation(command)
 
     if not docs:
-        console.print(f"[yellow]No indexed documentation found for '{command}'.[/yellow]")
+        console.print(f"[yellow]No indexed documentation found for '{escape(command)}'.[/yellow]")
         return
 
     console.print(Panel(
@@ -528,17 +531,17 @@ def app_find(
         apps = json.loads(res.stdout)
         if isinstance(apps, dict):
             apps = [apps]
-        table = Table(title=f"Installed Windows Applications (Query: '{query or 'all'}')", border_style="cyan")
+        table = Table(title=f"Installed Windows Applications (Query: '{escape(query or 'all')}')", border_style="cyan")
         table.add_column("Application Name", style="bold white")
         table.add_column("Type", style="yellow")
         table.add_column("Source", style="magenta")
         table.add_column("Target / ID", style="green")
 
         for a in apps:
-            table.add_row(escape(a.get("Name", "")), a.get("Type", ""), a.get("Source", ""), escape(a.get("Target", "")))
+            table.add_row(escape(a.get("Name", "")), escape(a.get("Type", "")), escape(a.get("Source", "")), escape(a.get("Target", "")))
         console.print(table)
-    except Exception as ex:
-        console.print(res.stdout)
+    except Exception:
+        console.print(res.stdout, markup=False)
 
 
 @app_cli.command("launch")
@@ -549,9 +552,9 @@ def app_launch(
 ):
     """Launches any Windows application (Win32, UWP Store app, or protocol URI)."""
     agent = WinTermAgent()
-    console.print(f"[cyan]Launching '{target}'...[/cyan]")
+    console.print(f"[cyan]Launching '{escape(target)}'...[/cyan]")
     res, _, _ = agent.launch_application(target=target, arguments=args, elevated=elevated)
-    console.print(res.stdout or res.stderr)
+    console.print(res.stdout or res.stderr, markup=False)
 
 
 @app_cli.command("close")
@@ -561,9 +564,9 @@ def app_close(
 ):
     """Gracefully closes or forcefully terminates a running application."""
     agent = WinTermAgent()
-    console.print(f"[cyan]Closing '{target}' (Force={force})...[/cyan]")
+    console.print(f"[cyan]Closing '{escape(target)}' (Force={force})...[/cyan]")
     res, _, _ = agent.close_application(target=target, force=force)
-    console.print(res.stdout or res.stderr)
+    console.print(res.stdout or res.stderr, markup=False)
 
 
 @app_cli.command("learn")
@@ -572,17 +575,17 @@ def app_learn(
 ):
     """Probes local help, parses options, cross-references Knowledge Graph, and synthesizes an operational guide."""
     agent = WinTermAgent()
-    console.print(f"[cyan]Probing and learning operational guide for '{target}'...[/cyan]")
+    console.print(f"[cyan]Probing and learning operational guide for '{escape(target)}'...[/cyan]")
     dossier = agent.learn_application(target)
 
     status_color = "green" if "LEARNED" in dossier["status"] else "yellow"
     console.print(Panel(
         f"[bold]Target:[/bold] {escape(dossier['target'])}\n"
-        f"[bold]Status:[/bold] [{status_color}]{dossier['status']}[/{status_color}]\n"
-        f"[bold]Mode:[/bold] {dossier['mode']}\n"
+        f"[bold]Status:[/bold] [{status_color}]{escape(dossier['status'])}[/{status_color}]\n"
+        f"[bold]Mode:[/bold] {escape(dossier['mode'])}\n"
         f"[bold]Synopsis:[/bold] {escape(dossier['synopsis'])}\n"
         f"[bold]Operational Summary:[/bold] {escape(dossier['operational_summary'])}",
-        title=f"Application Learning Dossier: {target}",
+        title=f"Application Learning Dossier: {escape(target)}",
         border_style=status_color,
     ))
 
@@ -625,7 +628,7 @@ def window_list(
         windows = json.loads(res.stdout)
         if isinstance(windows, dict):
             windows = [windows]
-        table = Table(title=f"Visible Application Windows (Filter: '{query or 'all'}')", border_style="cyan")
+        table = Table(title=f"Visible Application Windows (Filter: '{escape(query or 'all')}')", border_style="cyan")
         table.add_column("Handle (HWND)", style="bold cyan")
         table.add_column("Process", style="yellow")
         table.add_column("Title", style="bold white")
@@ -638,11 +641,11 @@ def window_list(
                 escape(w.get("ProcessName", "")),
                 escape(w.get("Title", "")),
                 f"{w.get('X')},{w.get('Y')} ({w.get('Width')}x{w.get('Height')})",
-                w.get("State", ""),
+                escape(w.get("State", "")),
             )
         console.print(table)
     except Exception:
-        console.print(res.stdout)
+        console.print(res.stdout, markup=False)
 
 
 @window_cli.command("focus")
@@ -651,9 +654,9 @@ def window_focus(
 ):
     """Brings an application window to the foreground and restores it if minimized."""
     agent = WinTermAgent()
-    console.print(f"[cyan]Focusing window '{identifier}'...[/cyan]")
+    console.print(f"[cyan]Focusing window '{escape(identifier)}'...[/cyan]")
     res, _, _ = agent.focus_window(identifier=identifier)
-    console.print(res.stdout or res.stderr)
+    console.print(res.stdout or res.stderr, markup=False)
 
 
 @window_cli.command("resize")
@@ -666,9 +669,9 @@ def window_resize(
 ):
     """Repositions and resizes an application window."""
     agent = WinTermAgent()
-    console.print(f"[cyan]Resizing window '{identifier}' to {width}x{height} at ({x}, {y})...[/cyan]")
+    console.print(f"[cyan]Resizing window '{escape(identifier)}' to {width}x{height} at ({x}, {y})...[/cyan]")
     res, _, _ = agent.resize_window(identifier, x, y, width, height)
-    console.print(res.stdout or res.stderr)
+    console.print(res.stdout or res.stderr, markup=False)
 
 
 @window_cli.command("close")
@@ -677,9 +680,9 @@ def window_close(
 ):
     """Sends native Win32 WM_CLOSE message to gracefully close an application window."""
     agent = WinTermAgent()
-    console.print(f"[cyan]Closing window '{identifier}'...[/cyan]")
+    console.print(f"[cyan]Closing window '{escape(identifier)}'...[/cyan]")
     res, _, _ = agent.close_window(identifier)
-    console.print(res.stdout or res.stderr)
+    console.print(res.stdout or res.stderr, markup=False)
 
 
 
@@ -698,7 +701,7 @@ def input_type(
     """Types keyboard text into active window."""
     agent = WinTermAgent()
     res, _, _ = agent.type_text(text, interval_ms=interval)
-    console.print(res.stdout or res.stderr)
+    console.print(res.stdout or res.stderr, markup=False)
 
 
 @input_cli.command("hotkey")
@@ -708,7 +711,7 @@ def input_hotkey(
     """Simulates pressing a keyboard hotkey or key combination."""
     agent = WinTermAgent()
     res, _, _ = agent.press_hotkey(keys)
-    console.print(res.stdout or res.stderr)
+    console.print(res.stdout or res.stderr, markup=False)
 
 
 @input_cli.command("click")
@@ -721,7 +724,7 @@ def input_click(
     """Moves mouse and clicks at specified coordinates."""
     agent = WinTermAgent()
     res, _, _ = agent.mouse_click(x, y, button=button, double=double)
-    console.print(res.stdout or res.stderr)
+    console.print(res.stdout or res.stderr, markup=False)
 
 
 @input_cli.command("drag")
@@ -734,7 +737,7 @@ def input_drag(
     """Drags mouse from start coordinates to end coordinates."""
     agent = WinTermAgent()
     res, _, _ = agent.mouse_drag(start_x, start_y, end_x, end_y)
-    console.print(res.stdout or res.stderr)
+    console.print(res.stdout or res.stderr, markup=False)
 
 
 @input_cli.command("inspect")
@@ -754,7 +757,7 @@ def input_inspect(
     try:
         data = json.loads(res.stdout)
         elements = data.get("Elements", [])
-        table = Table(title=f"UI Elements in '{data.get('WindowTitle')}' ({len(elements)} items)", border_style="cyan")
+        table = Table(title=f"UI Elements in '{escape(str(data.get('WindowTitle')))}' ({len(elements)} items)", border_style="cyan")
         table.add_column("Control Type", style="bold yellow")
         table.add_column("Name", style="bold white")
         table.add_column("AutomationId", style="green")
@@ -764,10 +767,10 @@ def input_inspect(
             cx = el.get("CenterX")
             cy = el.get("CenterY")
             center_str = f"({cx}, {cy})" if cx is not None and cy is not None else "-"
-            table.add_row(el.get("ControlType", ""), escape(el.get("Name", "")), escape(el.get("AutomationId", "")), center_str)
+            table.add_row(escape(el.get("ControlType", "")), escape(el.get("Name", "")), escape(el.get("AutomationId", "")), center_str)
         console.print(table)
     except Exception:
-        console.print(res.stdout)
+        console.print(res.stdout, markup=False)
 
 
 # =============================================================================
@@ -797,7 +800,7 @@ def screen_state():
         table.add_row("Foreground HWND", str(data.get('ForegroundHWND') or ''))
         console.print(table)
     except Exception:
-        console.print(res.stdout)
+        console.print(res.stdout, markup=False)
 
 
 @screen_cli.command("capture")
@@ -807,9 +810,9 @@ def screen_capture(
 ):
     """Captures desktop or window screenshot as PNG."""
     agent = WinTermAgent()
-    console.print(f"[cyan]Capturing screen to '{output}'...[/cyan]")
+    console.print(f"[cyan]Capturing screen to '{escape(output)}'...[/cyan]")
     res, _, _ = agent.capture_screen(output, window_query=window)
-    console.print(res.stdout or res.stderr)
+    console.print(res.stdout or res.stderr, markup=False)
 
 
 if __name__ == "__main__":
