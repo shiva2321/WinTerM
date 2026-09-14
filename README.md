@@ -3,9 +3,9 @@
 [![GitHub Repo](https://img.shields.io/badge/GitHub-shiva2321%2FWinTerM-181717?logo=github)](https://github.com/shiva2321/WinTerM)
 [![Windows](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011%20%7C%20Server-0078D6?logo=windows)](https://microsoft.com)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python)](https://python.org)
-[![Tests](https://img.shields.io/badge/Tests-108%2F108%20Passing-brightgreen?logo=pytest)](https://github.com/shiva2321/WinTerM/actions)
+[![Tests](https://img.shields.io/badge/Tests-125%2F125%20Passing-brightgreen?logo=pytest)](https://github.com/shiva2321/WinTerM/actions)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Model Context Protocol](https://img.shields.io/badge/MCP-37%20Tools%20%2B%20Prompts-FF6B6B)](https://modelcontextprotocol.io)
+[![Model Context Protocol](https://img.shields.io/badge/MCP-41%20Tools%20%2B%20Prompts-FF6B6B)](https://modelcontextprotocol.io)
 [![Gemini Ready](https://img.shields.io/badge/Gemini-Native%20Support-8E75B2?logo=google)](GEMINI.md)
 [![DeepSeek Ready](https://img.shields.io/badge/DeepSeek-R1%20CoT%20Aligned-007AFF?logo=deepseek)](DEEPSEEK.md)
 [![Linux & WSL2](https://img.shields.io/badge/Linux%20%26%20WSL2-Deterministic%20Safety-FCC624?logo=linux&logoColor=black)](winterm/subsystems/linux_subsystem.py)
@@ -35,7 +35,8 @@ Most AI agents running on Windows fail because they rely on fragile shell wrappe
 | **Autonomous Error Self-Healing** | ❌ Manual debugging required | ❌ None | ❌ None | ✅ **100+ HRESULT, Win32 & POSIX Catalog** |
 | **Knowledge Graph & Hallucination Defense** | ❌ Frequent flag hallucinations | ❌ None | ❌ None | ✅ **10,374-Node Graph with 3 Datasets** |
 | **Multi-Agent Coexistence Coordinator** | ❌ Session stomping & collisions | ❌ None | ❌ None | ✅ **Resource Locks & Shared Ledgers** |
-| **Model Context Protocol (MCP)** | ❌ None | ❌ None | ❌ None | ✅ **37 Production Tools + System Prompts** |
+| **Script Justification & Reusable Playbooks** | ❌ Unchecked script bloat | ❌ None | ❌ None | ✅ **Strict Anti-Waste Gate + Parameter Playbooks** |
+| **Model Context Protocol (MCP)** | ❌ None | ❌ None | ❌ None | ✅ **41 Production Tools + System Prompts** |
 
 ---
 
@@ -333,7 +334,7 @@ Add to your `mcp_config.json` or Claude Desktop configuration:
 }
 ```
 
-### Exposed MCP Tools (37 Total):
+### Exposed MCP Tools (41 Total):
 
 #### 1. Core Execution & 5W Cognitive Engine (7 Tools)
 - `plan_terminal_task`: Decomposes natural language goals into staged Directed Acyclic Graph (DAG) execution plans.
@@ -383,6 +384,12 @@ Add to your `mcp_config.json` or Claude Desktop configuration:
 - `winterm_input_mouse_drag`: Performs drag-and-drop mouse gestures from start to end coordinates with guaranteed mouse-up release blocks.
 - `winterm_screen_state`: Queries live display resolution, active cursor position, and foreground window metrics.
 - `winterm_screen_capture`: Captures high-resolution visual screenshots of the full desktop or target window as PNG for visual perception.
+
+#### 7. Reusable Task Playbooks & Script Justification (4 Tools)
+- `winterm_playbook_create`: Generates defensive task scripts with typed parameters. Enforces `ScriptJustificationGate` (blocks atomic one-liners, approving only multi-step workflows, loops, branching, or rollback logic).
+- `winterm_playbook_match_run`: Matches recurring user situations against the playbook catalog, extracts parameters, and executes the compiled script.
+- `winterm_playbook_list`: Lists all registered, reusable task playbooks with parameter schemas, safety tiers, and execution telemetry.
+- `winterm_playbook_prune`: Prunes stale or least recently used playbooks down to a target count (LRU policy) to eliminate disk and resource waste.
 
 ### Exposed MCP Prompts
 - `windows_agent_instructions`: Out-of-the-box system prompt that grounds autonomous agents in the Windows closed-loop automation protocol.
@@ -519,7 +526,35 @@ winterm input drag 100 100 400 400
 winterm screen state
 winterm screen capture --output screenshot.png
 winterm screen capture --output app.png --window "Calculator"
+
+# ==============================================================================
+# Reusable Task Playbooks & Quota Management
+# ==============================================================================
+winterm playbook list
+winterm playbook run pb-a1b2c3d4 -p Port=8080
+winterm playbook prune --max 30
 ```
+
+---
+
+## Script Justification Gate & Reusable Playbooks Engine
+
+Autonomous agents frequently produce script clutter by writing temporary `.ps1` or `.sh` files for trivial, atomic one-liners. WinTerM solves this with the **Script Justification Gate** and **Playbook Engine**:
+
+1. **Anti-Waste Principle (Direct Execution First)**:
+   - Atomic single-step commands (e.g. `ipconfig`, `Get-Process`, `ls -la`, `docker ps`, `Stop-Process -Id 1234`) are **strictly forbidden** from generating scripts. WinTerM executes them directly in the terminal with zero disk I/O, zero compilation latency, and zero catalog clutter.
+2. **Strict Script Justification Criteria**:
+   - `ScriptJustificationGate` approves script synthesis (`winterm_playbook_create`) **only and strictly if**:
+     - The task requires multi-step workflow sequencing ($\ge 2$ interdependent commands).
+     - The task includes conditional branching (`if/else`, `switch`, `case`).
+     - The task includes iterative loops (`foreach`, `while`, `for`).
+     - The task includes transactional error recovery or compensation traps (`try/catch/finally`).
+3. **Automatic Generalization & Recurrence Promotion**:
+   - WinTerM tracks candidate routines in an ephemeral 50-item ring buffer.
+   - When a multi-step task recurs ($\ge 2$ runs), WinTerM automatically generalizes hardcoded literals (ports, filesystem paths, service names, PIDs) into typed parameter schemas (`param([int]$Port = 8080)`) and compiles a defensive, standalone script.
+4. **Deterministic Quota Enforcement**:
+   - A hard boundary of **50 playbooks** is strictly enforced.
+   - When the quota is exceeded, least recently used (LRU) playbooks and their underlying script files are automatically pruned.
 
 ---
 
@@ -530,7 +565,7 @@ Run the full automated test suite using pytest:
 python -m pytest tests/ -v
 ```
 
-All **87 out of 87 automated tests (100%)** pass cleanly across all 10 architectural layers, CLI command sets, Knowledge Graph reasoning routines, and MCP server integrations.
+All **125 out of 125 automated tests (100%)** pass cleanly across all 10 architectural layers, CLI command sets, Knowledge Graph reasoning routines, Playbook justification gates, and MCP server integrations.
 
 ---
 
