@@ -56,6 +56,29 @@ class MouseEngine:
         "            }\n"
         "        });\n"
         "    }\n"
+        "\n"
+        "    public static void Drag(int startX, int startY, int endX, int endY, int steps, uint downFlag, uint upFlag) {\n"
+        "        RunOnDefaultDesktop(() => {\n"
+        "            SetCursorPos(startX, startY);\n"
+        "            try {\n"
+        "                mouse_event(downFlag, 0, 0, 0, 0);\n"
+        "                System.Threading.Thread.Sleep(50);\n"
+        "                int n = steps > 0 ? steps : 1;\n"
+        "                for (int i = 1; i <= n; i++) {\n"
+        "                    int curX = startX + (endX - startX) * i / n;\n"
+        "                    int curY = startY + (endY - startY) * i / n;\n"
+        "                    SetCursorPos(curX, curY);\n"
+        "                    System.Threading.Thread.Sleep(10);\n"
+        "                }\n"
+        "            } finally {\n"
+        "                mouse_event(upFlag, 0, 0, 0, 0);\n"
+        "            }\n"
+        "        });\n"
+        "    }\n"
+        "\n"
+        "    public static void Scroll(uint flag, uint delta) {\n"
+        "        RunOnDefaultDesktop(() => { mouse_event(flag, 0, 0, delta, 0); });\n"
+        "    }\n"
         "}\n"
         "'@\n"
         "if (-not ([System.Management.Automation.PSTypeName]'Win32MouseCore').Type) { Add-Type -TypeDefinition $codeMouse };\n"
@@ -129,20 +152,7 @@ class MouseEngine:
         up_flag = cls.MOUSEEVENTF_RIGHTUP if button.lower() == "right" else cls.MOUSEEVENTF_LEFTUP
         return (
             f"{cls.WIN32_MOUSE_HEADER}"
-            f"[Win32MouseCore]::SetCursorPos({start_x}, {start_y}) | Out-Null; "
-            f"try {{ "
-            f"    [Win32MouseCore]::mouse_event(0x{down_flag:04X}, 0, 0, 0, 0); "
-            f"    Start-Sleep -Milliseconds 50; "
-            f"    $steps = {steps}; "
-            f"    for ($i = 1; $i -le $steps; $i++) {{ "
-            f"        $curX = [int]({start_x} + (({end_x} - {start_x}) * $i / $steps)); "
-            f"        $curY = [int]({start_y} + (({end_y} - {start_y}) * $i / $steps)); "
-            f"        [Win32MouseCore]::SetCursorPos($curX, $curY) | Out-Null; "
-            f"        Start-Sleep -Milliseconds 10; "
-            f"    }} "
-            f"}} finally {{ "
-            f"    [Win32MouseCore]::mouse_event(0x{up_flag:04X}, 0, 0, 0, 0); "
-            f"}} "
+            f"[Win32MouseCore]::Drag({start_x}, {start_y}, {end_x}, {end_y}, {steps}, 0x{down_flag:04X}, 0x{up_flag:04X}); "
             "@{ Action = 'MouseDragAndDrop'; StartX = " + str(start_x) + "; StartY = " + str(start_y) + "; EndX = " + str(end_x) + "; EndY = " + str(end_y) + "; Success = $True } | ConvertTo-Json -Compress"
         )
 
@@ -154,8 +164,8 @@ class MouseEngine:
         uint_delta = effective_delta & 0xFFFFFFFF
         return (
             f"{cls.WIN32_MOUSE_HEADER}"
-            f"[Win32MouseCore]::mouse_event(0x{flag:04X}, 0, 0, [uint32]{uint_delta}, 0); "
-            "@{ Action = 'MouseScroll'; Amount = " + str(amount) + "; Horizontal = " + str(horizontal).lower() + "; Success = $True } | ConvertTo-Json -Compress"
+            f"[Win32MouseCore]::Scroll(0x{flag:04X}, [uint32]{uint_delta}); "
+            "@{ Action = 'MouseScroll'; Amount = " + str(amount) + "; Horizontal = $" + str(bool(horizontal)).lower() + "; Success = $True } | ConvertTo-Json -Compress"
         )
 
 

@@ -115,17 +115,21 @@ def test_mouse_click_and_drag():
 
     # Drag
     drag = engine.build_drag_and_drop_command(100, 100, 300, 300, steps=10)
-    assert "mouse_event" in drag
     assert "SetCursorPos" in drag
+    # Regression: the drag call must go through the RunOnDefaultDesktop-wrapped
+    # Drag() helper (like Click()/SetPos()), not raw unwrapped P/Invoke calls --
+    # otherwise drags can silently fail to reach the interactive desktop in
+    # constrained execution contexts where click/type still work.
+    assert "Win32MouseCore]::Drag(100, 100, 300, 300, 10" in drag
 
 
 def test_mouse_scroll():
     engine = MouseEngine()
     v_scroll = engine.build_scroll_command(amount=-1)
-    assert "mouse_event(0x0800" in v_scroll
+    assert "Win32MouseCore]::Scroll(0x0800" in v_scroll
 
     h_scroll = engine.build_scroll_command(amount=1, horizontal=True)
-    assert "mouse_event(0x1000" in h_scroll
+    assert "Win32MouseCore]::Scroll(0x1000" in h_scroll
 
 
 # ==============================================================================
