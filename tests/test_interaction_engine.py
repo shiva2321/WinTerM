@@ -52,6 +52,25 @@ def test_keyboard_type_text():
     assert "TypeUnicode" in script_alias
 
 
+def test_keyboard_type_text_uses_sendinput_not_keybd_event_unicode():
+    """Regression: TypeUnicode must synthesize Unicode text via SendInput.
+
+    keybd_event() does not document support for KEYEVENTF_UNICODE (0x0004) --
+    only SendInput's KEYBDINPUT does. Calling keybd_event with that flag is
+    undefined behavior and was observed, in live manual testing, to crash a
+    real WinUI3 app (Windows 11 Notepad) on roughly half of attempts. Guard
+    against this regressing back to the unsupported call shape.
+    """
+    engine = KeyboardEngine()
+    script = engine.build_type_text_command("hello world", interval_ms=0)
+    assert "SendInput" in script
+    assert "KEYEVENTF_UNICODE" in script
+    # The old, undefined-behavior call shape must not reappear:
+    # keybd_event(0, (byte)c, 0x0004, 0) -- a bScan byte paired with the
+    # unicode flag passed directly to keybd_event rather than via SendInput.
+    assert "keybd_event(0, (byte)c" not in script
+
+
 def test_keyboard_hotkeys():
     engine = KeyboardEngine()
     ctrl_c = engine.build_hotkey_command(["ctrl", "c"])
