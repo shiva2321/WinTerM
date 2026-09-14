@@ -3,7 +3,7 @@
 [![GitHub Repo](https://img.shields.io/badge/GitHub-shiva2321%2FWinTerM-181717?logo=github)](https://github.com/shiva2321/WinTerM)
 [![Windows](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011%20%7C%20Server-0078D6?logo=windows)](https://microsoft.com)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python)](https://python.org)
-[![Tests](https://img.shields.io/badge/Tests-87%2F87%20Passing-brightgreen?logo=pytest)](https://github.com/shiva2321/WinTerM/actions)
+[![Tests](https://img.shields.io/badge/Tests-88%2F88%20Passing-brightgreen?logo=pytest)](https://github.com/shiva2321/WinTerM/actions)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Model Context Protocol](https://img.shields.io/badge/MCP-32%20Tools%20%2B%20Prompts-FF6B6B)](https://modelcontextprotocol.io)
 [![PRs Welcome](https://img.shields.io/badge/PRs-Welcome-brightgreen.svg)](CONTRIBUTING.md)
