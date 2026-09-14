@@ -17,8 +17,56 @@ from winterm.graph.builder import build_windows_knowledge_graph
 class WindowsKnowledgeGraph:
     """Deterministic, graph-theoretic reasoning engine for Windows terminal operations."""
 
+    _SHARED_GRAPH: Optional[nx.MultiDiGraph] = None
+    _SHARED_CMD_INDEX: Optional[Dict[str, str]] = None
+    _SHARED_RES_INDEX: Optional[Dict[str, str]] = None
+    _SHARED_ERR_INDEX: Optional[Dict[str, str]] = None
+
+    @staticmethod
+    def _build_indices(graph: nx.MultiDiGraph) -> Tuple[Dict[str, str], Dict[str, str], Dict[str, str]]:
+        cmd_index: Dict[str, str] = {}
+        res_index: Dict[str, str] = {}
+        err_index: Dict[str, str] = {}
+        for node_id, data in graph.nodes(data=True):
+            nt = data.get("node_type")
+            name = data.get("name", "").lower()
+            if nt == NodeType.COMMAND.value:
+                if name:
+                    cmd_index[name] = node_id
+                if name.endswith(".exe"):
+                    cmd_index[name[:-4]] = node_id
+            elif nt in (NodeType.SERVICE_RESOURCE.value, NodeType.STATE_ENTITY.value):
+                if name:
+                    res_index[name] = node_id
+            elif nt == NodeType.ERROR_CODE.value:
+                if name:
+                    err_index[name] = node_id
+                ec = data.get("error_code", "").lower()
+                if ec:
+                    err_index[ec] = node_id
+                wc = str(data.get("win32_code", "")).lower()
+                if wc:
+                    err_index[wc] = node_id
+        return cmd_index, res_index, err_index
+
     def __init__(self, graph: Optional[nx.MultiDiGraph] = None):
-        self.graph = graph if graph is not None else build_windows_knowledge_graph()
+        if graph is None:
+            if WindowsKnowledgeGraph._SHARED_GRAPH is None:
+                WindowsKnowledgeGraph._SHARED_GRAPH = build_windows_knowledge_graph()
+                c_idx, r_idx, e_idx = self._build_indices(WindowsKnowledgeGraph._SHARED_GRAPH)
+                WindowsKnowledgeGraph._SHARED_CMD_INDEX = c_idx
+                WindowsKnowledgeGraph._SHARED_RES_INDEX = r_idx
+                WindowsKnowledgeGraph._SHARED_ERR_INDEX = e_idx
+            self.graph = WindowsKnowledgeGraph._SHARED_GRAPH
+            self._cmd_index = WindowsKnowledgeGraph._SHARED_CMD_INDEX or {}
+            self._res_index = WindowsKnowledgeGraph._SHARED_RES_INDEX or {}
+            self._err_index = WindowsKnowledgeGraph._SHARED_ERR_INDEX or {}
+        else:
+            self.graph = graph
+            c_idx, r_idx, e_idx = self._build_indices(graph)
+            self._cmd_index = c_idx
+            self._res_index = r_idx
+            self._err_index = e_idx
 
     def get_metrics(self) -> Dict[str, Any]:
         """Returns node and edge topological counts across the graph."""
@@ -421,7 +469,6 @@ class WindowsKnowledgeGraph:
 
     def _resolve_command_node(self, command: str) -> Optional[str]:
         cmd_lower = command.lower().strip()
-        # Direct check
         candidates = [
             f"cmdlet:{cmd_lower}",
             f"binary:{cmd_lower}",
@@ -430,13 +477,7 @@ class WindowsKnowledgeGraph:
         for c in candidates:
             if self.graph.has_node(c):
                 return c
-
-        # Scan nodes
-        for node_id, data in self.graph.nodes(data=True):
-            if data.get("node_type") == NodeType.COMMAND.value:
-                if data.get("name", "").lower() == cmd_lower:
-                    return node_id
-        return None
+        return self._cmd_index.get(cmd_lower)
 
     def _resolve_resource_node(self, resource: str) -> Optional[str]:
         res_lower = resource.lower().strip()
@@ -447,27 +488,11 @@ class WindowsKnowledgeGraph:
         for c in candidates:
             if self.graph.has_node(c):
                 return c
-
-        for node_id, data in self.graph.nodes(data=True):
-            if data.get("node_type") in (NodeType.SERVICE_RESOURCE.value, NodeType.STATE_ENTITY.value):
-                if data.get("name", "").lower() == res_lower:
-                    return node_id
-        return None
+        return self._res_index.get(res_lower)
 
     def _resolve_error_node(self, error_sig: str) -> Optional[str]:
         err_lower = error_sig.lower().strip()
-        # Check direct ID
         candidate = f"error:{err_lower}"
         if self.graph.has_node(candidate):
             return candidate
-
-        # Check by symbol, code, or win32 code
-        for node_id, data in self.graph.nodes(data=True):
-            if data.get("node_type") == NodeType.ERROR_CODE.value:
-                if (
-                    data.get("name", "").lower() == err_lower
-                    or data.get("error_code", "").lower() == err_lower
-                    or str(data.get("win32_code", "")).lower() == err_lower
-                ):
-                    return node_id
-        return None
+        return self._err_index.get(err_lower)

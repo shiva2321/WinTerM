@@ -164,6 +164,10 @@ class WindowsErrorCatalog:
     @classmethod
     def diagnose(cls, stderr: str, stdout: str, exit_code: int, failed_command: str = "") -> Optional[SelfHealingProposal]:
         """Analyzes command failure output and generates a precise self-healing proposal."""
+        # Fast exit on clean execution
+        if exit_code == 0 and not (stderr and stderr.strip()):
+            return None
+
         combined_text = f"{stderr}\n{stdout}\nExitCode:{exit_code}"
 
         for diagnosis in cls.DIAGNOSES:

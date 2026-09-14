@@ -17,17 +17,24 @@ class HuggingFaceIngestor:
     DATASET_INTENT_COMMANDS = "sumit-s-nair/command-dataset"
     DATASET_TERMINAL_SFT = "mshojaei77/terminal-command-execution-sft"
 
+    _cached_corpus: Optional[Dict[str, Any]] = None
+
     @classmethod
     def load_or_ingest(cls, force_reingest: bool = False) -> Dict[str, Any]:
         """Loads precompiled corpus if available, otherwise ingests from Hugging Face datasets."""
+        if not force_reingest and cls._cached_corpus is not None:
+            return cls._cached_corpus
+
         if not force_reingest and COMPILED_CACHE_PATH.exists():
             try:
                 with gzip.open(COMPILED_CACHE_PATH, "rt", encoding="utf-8") as f:
-                    return json.load(f)
+                    cls._cached_corpus = json.load(f)
+                    return cls._cached_corpus
             except Exception:
                 pass  # Fall back to live ingestion on corrupt cache
 
-        return cls.ingest_all_and_cache()
+        cls._cached_corpus = cls.ingest_all_and_cache()
+        return cls._cached_corpus
 
     @classmethod
     def ingest_all_and_cache(cls) -> Dict[str, Any]:

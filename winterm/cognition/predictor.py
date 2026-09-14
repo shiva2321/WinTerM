@@ -19,6 +19,12 @@ from winterm.knowledge.elevation_rules import ElevationRules
 from winterm.graph.engine import WindowsKnowledgeGraph
 
 
+_RE_PROC_ID = re.compile(r'-id\s+(\d+)', re.IGNORECASE)
+_RE_SVC_NAME = re.compile(r'(?:-name\s+|stop\s+)([\w\-]+)', re.IGNORECASE)
+_RE_NEW_PATH = re.compile(r"-path\s+['\"]?([^'\"]+)['\"]?", re.IGNORECASE)
+_RE_DEL_PATH = re.compile(r"(?:-path\s+['\"]?|del\s+|rd\s+)([^'\"\s]+)", re.IGNORECASE)
+
+
 class ImpactPredictor:
     """Simulates and forecasts state diffs across Windows subsystems before commands execute."""
 
@@ -54,8 +60,7 @@ class ImpactPredictor:
             risk = RiskLevel.ELEVATION_REQUIRED
             warnings.append("Requires Administrative privileges. Will prompt UAC or require elevated shell.")
 
-        # HuggingFace SFT Safety Guard evaluation (early risk escalation only;
-        # the final safety classification + warning is applied once at the end).
+        # HuggingFace SFT Safety Guard evaluation (computed once and reused)
         safety_info = kg.get_safety_classification(cmd)
         if safety_info.get("is_dangerous"):
             if safety_info.get("safety_label") == "destructive" and risk != RiskLevel.HIGH_DESTRUCTIVE:
@@ -64,7 +69,7 @@ class ImpactPredictor:
         # 1. Process termination
         if "stop-process" in cmd_lower or "taskkill" in cmd_lower:
             risk = RiskLevel.MEDIUM
-            proc_id_m = re.search(r'-id\s+(\d+)', cmd_lower)
+            proc_id_m = _RE_PROC_ID.search(cmd_lower)
             pid_str = proc_id_m.group(1) if proc_id_m else "target"
             proc_name = step.metadata.get("process_name") or step.metadata.get("target") or "target"
             state_diff.processes.terminated_processes.append(f"{proc_name} (PID: {pid_str})")
@@ -83,7 +88,7 @@ class ImpactPredictor:
         if any(w in cmd_lower for w in ["restart-service", "stop-service", "net stop", "sc stop"]):
             svc_name = step.metadata.get("service_name")
             if not svc_name:
-                svc_m = re.search(r'(?:-name\s+|stop\s+)([\w\-]+)', cmd_lower)
+                svc_m = _RE_SVC_NAME.search(cmd_lower)
                 svc_name = svc_m.group(1).strip() if svc_m else "target_service"
 
             state_diff.services.services_stopped.append(svc_name)
@@ -111,7 +116,7 @@ class ImpactPredictor:
 
         # 4. Filesystem: Directory / File creation
         elif "new-item" in cmd_lower and "-itemtype directory" in cmd_lower:
-            path_m = re.search(r"-path\s+['\"]?([^'\"]+)['\"]?", cmd, re.IGNORECASE)
+            path_m = _RE_NEW_PATH.search(cmd)
             created_dir = path_m.group(1).strip() if path_m else "new_directory"
             state_diff.filesystem.created_paths.append(created_dir)
             risk = RiskLevel.SAFE
@@ -124,7 +129,7 @@ class ImpactPredictor:
 
         # 5. Filesystem: Deletion / Removal
         elif any(w in cmd_lower for w in ["remove-item", "del /", "rmdir /", "rd /"]):
-            path_m = re.search(r"(?:-path\s+['\"]?|del\s+|rd\s+)([^'\"\s]+)", cmd, re.IGNORECASE)
+            path_m = _RE_DEL_PATH.search(cmd)
             target_del = path_m.group(1).strip() if path_m else "target_path"
             state_diff.filesystem.deleted_paths.append(target_del)
             risk = RiskLevel.HIGH_DESTRUCTIVE
@@ -192,9 +197,7 @@ class ImpactPredictor:
             side_effects.append("No system state modification. Read-only diagnostic query.")
 
         # Final safety classification from the deterministic guard / SFT graph
-        # (single authoritative pass — runs last so it cannot be overwritten by
-        # the heuristic elif chain above).
-        safety_info = kg.get_safety_classification(cmd)
+        # (reusing early evaluation result — ensures consistency without redundant computation)
         if safety_info.get("is_dangerous"):
             if safety_info.get("safety_label") == "destructive":
                 risk = RiskLevel.HIGH_DESTRUCTIVE

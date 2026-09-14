@@ -24,6 +24,7 @@ class AgentSession(BaseModel):
     session_id: str
     agent_framework: str = Field(default="generic", description="Agent runtime identifier (e.g. claude-code, opencode, gemini, deepseek)")
     active_plan: Optional[ExecutionPlan] = None
+    max_history_steps: int = Field(default=500, description="Upper bound on historical ledger entries to prevent memory leaks in long-running sessions")
     history: List[SessionStepRecord] = Field(default_factory=list)
     rollback_stack: List[RollbackAction] = Field(default_factory=list)
 
@@ -44,8 +45,14 @@ class AgentSession(BaseModel):
             rollback_action=rollback,
         )
         self.history.append(record)
+        # Prevent memory leaks in long-running autonomous sessions
+        if len(self.history) > self.max_history_steps:
+            self.history = self.history[-self.max_history_steps:]
+
         if rollback and exec_res and exec_res.success:
             self.rollback_stack.append(rollback)
+            if len(self.rollback_stack) > 100:
+                self.rollback_stack = self.rollback_stack[-100:]
 
     def pop_rollback(self) -> Optional[RollbackAction]:
         """Pops the most recent rollback action from the undo stack."""

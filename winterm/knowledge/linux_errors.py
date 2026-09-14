@@ -130,6 +130,9 @@ class LinuxErrorCatalog:
         failed_command: str = "",
     ) -> Optional[SelfHealingProposal]:
         """Scans combined terminal output and exit code for known Linux error signatures."""
+        if exit_code == 0 and not (stderr and stderr.strip()):
+            return None
+
         combined_text = f"{stdout}\n{stderr}\nExit code: {exit_code}"
 
         for diag in cls.DIAGNOSES:

@@ -108,6 +108,13 @@ class WindowsShellExecutor:
 
         duration_ms = int((time.perf_counter() - start_time) * 1000)
 
+        # Truncate if output exceeds 5 MB safety cap to protect agent memory and token bounds
+        max_cap = 5 * 1024 * 1024
+        if len(raw_stdout) > max_cap:
+            raw_stdout = raw_stdout[:max_cap] + b"\n[... stdout truncated: output exceeded 5MB memory safety cap ...]"
+        if len(raw_stderr) > max_cap:
+            raw_stderr = raw_stderr[:max_cap] + b"\n[... stderr truncated: output exceeded 5MB memory safety cap ...]"
+
         # Decode output streams safely
         stdout_str = EncodingExpert.decode_stream(raw_stdout)
         stderr_str = EncodingExpert.decode_stream(raw_stderr)
