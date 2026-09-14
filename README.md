@@ -170,6 +170,21 @@ winterm run "Query top 5 memory processes" --dry-run
 winterm run "Query system hardware info"
 ```
 
+#### Safety Gate (Protects Against Destructive Commands)
+Every execution is protected by a deterministic **SafetyGate** (see `winterm/knowledge/safety_guard.py`). Commands classified as `HIGH_DESTRUCTIVE` — e.g. `Remove-Item` on protected system paths, `Stop-Computer`, `Format-Volume`, `diskpart`, registry deletion — are **refused by default**:
+
+```powershell
+# Refused (exit code -100) — no confirmation supplied
+winterm run "Remove-Item -Recurse -Force C:\Windows\System32"
+# [X] Failed with exit code -100
+# [SAFETY GATE] Refused to execute: ...
+
+# Explicitly allow high-risk commands (DANGEROUS — use with extreme care)
+winterm run "Remove-Item -Recurse -Force C:\Windows\System32" --confirm-high-risk
+```
+
+Read-only queries (`Get-*`, `Select-*`, `Test-*`, `netstat`, `ipconfig`, ...) always pass through the gate normally.
+
 ### 5. Diagnose Windows Terminal Errors
 ```powershell
 winterm diagnose "0x80070005: Access is denied."
@@ -197,6 +212,12 @@ winterm graph docs robocopy
 # SFT safety & credential sensitivity classification (mshojaei77/terminal-command-execution-sft)
 winterm graph safety "Format-Volume -DriveLetter D"
 winterm graph safety "Get-Process"
+
+# Destructive commands are now deterministically flagged (SafetyGuard)
+winterm graph safety "Remove-Item -Recurse -Force C:\Windows\System32"
+# Safety Classification: DESTRUCTIVE / Dangerous / High Risk: True
+winterm graph safety "Stop-Computer -Force"
+# Safety Classification: DESTRUCTIVE / Dangerous / High Risk: True
 
 # Multi-step error remediation paths
 winterm graph remedy 0x80070005
