@@ -45,6 +45,11 @@ from winterm.tools.tool_definitions import (
     winterm_playbook_match_run,
     winterm_playbook_list,
     winterm_playbook_prune,
+    winterm_swarm_dispatch,
+    winterm_swarm_board_read,
+    winterm_swarm_board_post,
+    winterm_swarm_suggestions,
+    winterm_swarm_status,
     EXPORTED_TOOLS_SCHEMA,
 )
 
@@ -120,6 +125,11 @@ class WinTermMCPServer:
             "winterm_playbook_match_run": winterm_playbook_match_run,
             "winterm_playbook_list": winterm_playbook_list,
             "winterm_playbook_prune": winterm_playbook_prune,
+            "winterm_swarm_dispatch": winterm_swarm_dispatch,
+            "winterm_swarm_board_read": winterm_swarm_board_read,
+            "winterm_swarm_board_post": winterm_swarm_board_post,
+            "winterm_swarm_suggestions": winterm_swarm_suggestions,
+            "winterm_swarm_status": winterm_swarm_status,
         }
 
     def handle_request(self, req: Dict[str, Any]) -> Dict[str, Any]:

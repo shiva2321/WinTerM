@@ -3,9 +3,9 @@
 [![GitHub Repo](https://img.shields.io/badge/GitHub-shiva2321%2FWinTerM-181717?logo=github)](https://github.com/shiva2321/WinTerM)
 [![Windows](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011%20%7C%20Server-0078D6?logo=windows)](https://microsoft.com)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python)](https://python.org)
-[![Tests](https://img.shields.io/badge/Tests-125%2F125%20Passing-brightgreen?logo=pytest)](https://github.com/shiva2321/WinTerM/actions)
+[![Tests](https://img.shields.io/badge/Tests-138%2F138%20Passing-brightgreen?logo=pytest)](https://github.com/shiva2321/WinTerM/actions)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Model Context Protocol](https://img.shields.io/badge/MCP-41%20Tools%20%2B%20Prompts-FF6B6B)](https://modelcontextprotocol.io)
+[![Model Context Protocol](https://img.shields.io/badge/MCP-46%20Tools%20%2B%20Prompts-FF6B6B)](https://modelcontextprotocol.io)
 [![Gemini Ready](https://img.shields.io/badge/Gemini-Native%20Support-8E75B2?logo=google)](GEMINI.md)
 [![DeepSeek Ready](https://img.shields.io/badge/DeepSeek-R1%20CoT%20Aligned-007AFF?logo=deepseek)](DEEPSEEK.md)
 [![Linux & WSL2](https://img.shields.io/badge/Linux%20%26%20WSL2-Deterministic%20Safety-FCC624?logo=linux&logoColor=black)](winterm/subsystems/linux_subsystem.py)
@@ -36,7 +36,8 @@ Most AI agents running on Windows fail because they rely on fragile shell wrappe
 | **Knowledge Graph & Hallucination Defense** | ❌ Frequent flag hallucinations | ❌ None | ❌ None | ✅ **10,374-Node Graph with 3 Datasets** |
 | **Multi-Agent Coexistence Coordinator** | ❌ Session stomping & collisions | ❌ None | ❌ None | ✅ **Resource Locks & Shared Ledgers** |
 | **Script Justification & Reusable Playbooks** | ❌ Unchecked script bloat | ❌ None | ❌ None | ✅ **Strict Anti-Waste Gate + Parameter Playbooks** |
-| **Model Context Protocol (MCP)** | ❌ None | ❌ None | ❌ None | ✅ **41 Production Tools + System Prompts** |
+| **Multi-Agent Swarm & Layered Safety** | ❌ Uncontrolled child processes | ❌ None | ❌ None | ✅ **Scoped Privileges, Blackboard Board & Circuit Breaker** |
+| **Model Context Protocol (MCP)** | ❌ None | ❌ None | ❌ None | ✅ **46 Production Tools + System Prompts** |
 
 ---
 
@@ -334,7 +335,7 @@ Add to your `mcp_config.json` or Claude Desktop configuration:
 }
 ```
 
-### Exposed MCP Tools (41 Total):
+### Exposed MCP Tools (46 Total):
 
 #### 1. Core Execution & 5W Cognitive Engine (7 Tools)
 - `plan_terminal_task`: Decomposes natural language goals into staged Directed Acyclic Graph (DAG) execution plans.
@@ -390,6 +391,13 @@ Add to your `mcp_config.json` or Claude Desktop configuration:
 - `winterm_playbook_match_run`: Matches recurring user situations against the playbook catalog, extracts parameters, and executes the compiled script.
 - `winterm_playbook_list`: Lists all registered, reusable task playbooks with parameter schemas, safety tiers, and execution telemetry.
 - `winterm_playbook_prune`: Prunes stale or least recently used playbooks down to a target count (LRU policy) to eliminate disk and resource waste.
+
+#### 8. Multi-Agent Swarm & Layered Safety (5 Tools)
+- `winterm_swarm_dispatch`: Spawns and registers autonomous sub-agents with strictly defined capability scopes (`READ_ONLY_AUDIT`, `UI_OPERATOR`, `TERMINAL_EXECUTOR`, `NETWORK_INSPECTOR`, `FULL_SUPERVISOR`).
+- `winterm_swarm_board_read`: Reads messages, status reports, and alerts from the shared in-memory blackboard bus.
+- `winterm_swarm_board_post`: Broadcasts supervisor directives, progress updates, or telemetry across the swarm.
+- `winterm_swarm_suggestions`: Reviews, approves, or rejects proactive recommendations and self-healing proposals submitted by autonomous sub-agents.
+- `winterm_swarm_status`: Retrieves comprehensive swarm telemetry, sub-agent lifecycle states, and circuit breaker trip counters.
 
 ### Exposed MCP Prompts
 - `windows_agent_instructions`: Out-of-the-box system prompt that grounds autonomous agents in the Windows closed-loop automation protocol.
@@ -565,7 +573,7 @@ Run the full automated test suite using pytest:
 python -m pytest tests/ -v
 ```
 
-All **125 out of 125 automated tests (100%)** pass cleanly across all 10 architectural layers, CLI command sets, Knowledge Graph reasoning routines, Playbook justification gates, and MCP server integrations.
+All **138 out of 138 automated tests (100%)** pass cleanly across all 11 architectural layers, CLI command sets, Knowledge Graph reasoning routines, Playbook justification gates, Multi-Agent Swarm sandboxes, and MCP server integrations.
 
 ---
 

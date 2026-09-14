@@ -6,7 +6,7 @@ Welcome OpenCode agent! When interacting with the Windows Terminal, operating sy
 
 ## WinTerM MCP Tool Suite
 
-WinTerM provides 32 production-grade MCP tools configured in `opencode.json`:
+WinTerM provides 46 production-grade MCP tools configured in `opencode.json`:
 
 ### 1. Terminal Execution & 5W Cognition
 - `plan_terminal_task`: Decompose natural language goals into DAG steps.
@@ -28,6 +28,13 @@ WinTerM provides 32 production-grade MCP tools configured in `opencode.json`:
 - `winterm_input_hotkey`: Presses key combinations (`ctrl+s`, `alt+f4`, `win+r`).
 - `winterm_screen_state`: Live screen resolution, cursor position, and foreground window info.
 - `winterm_screen_capture`: Visual screenshot capture of full desktop or target window.
+
+### 3. Multi-Agent Swarm & Layered Safety
+- `winterm_swarm_dispatch`: Dispatches scoped sub-agents (`READ_ONLY_AUDIT`, `UI_OPERATOR`, `TERMINAL_EXECUTOR`, `NETWORK_INSPECTOR`, `FULL_SUPERVISOR`).
+- `winterm_swarm_board_read`: Reads messages from shared blackboard.
+- `winterm_swarm_board_post`: Broadcasts supervisory directives and status updates.
+- `winterm_swarm_suggestions`: Reviews and approves/rejects sub-agent suggestions.
+- `winterm_swarm_status`: Full swarm telemetry, lifecycle, and circuit-breaker states.
 
 ---
 

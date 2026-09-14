@@ -10,7 +10,7 @@ WinTerM equips AI agents with deterministic Windows Terminal and Linux/WSL2 mast
 ---
 
 ## Tool Availability
-When executing actions, use the **41 MCP tools** provided by WinTerM (`python -m winterm.tools.mcp_server`):
+When executing actions, use the **46 MCP tools** provided by WinTerM (`python -m winterm.tools.mcp_server`):
 - **Core 5W Pipeline**: `plan_terminal_task`, `explain_terminal_command`, `predict_command_impact`, `execute_terminal_command`, `diagnose_terminal_error`, `undo_last_terminal_action`.
 - **Linux & WSL2 Subsystem**: `winterm_linux_execute`, `winterm_linux_path_convert`, `winterm_linux_distro_list`, `winterm_linux_safety_check`, `winterm_linux_diagnose_error`.
 - **Knowledge Graph**: `winterm_graph_blast_radius`, `winterm_graph_validate_command`, `winterm_graph_remedy_error`, `winterm_graph_alternatives`, `winterm_graph_command_docs`, `winterm_graph_safety_check`.
@@ -18,6 +18,7 @@ When executing actions, use the **41 MCP tools** provided by WinTerM (`python -m
 - **Window Management**: `winterm_window_list`, `winterm_window_focus`, `winterm_window_resize`, `winterm_window_close`.
 - **UI Automation & Input**: `winterm_ui_inspect`, `winterm_ui_click`, `winterm_ui_set_text`, `winterm_input_type`, `winterm_input_hotkey`, `winterm_input_mouse_click`, `winterm_input_mouse_drag`, `winterm_screen_state`, `winterm_screen_capture`.
 - **Playbooks & Reusable Scripts**: `winterm_playbook_create`, `winterm_playbook_match_run`, `winterm_playbook_list`, `winterm_playbook_prune`.
+- **Multi-Agent Swarm Subsystem**: `winterm_swarm_dispatch`, `winterm_swarm_board_read`, `winterm_swarm_board_post`, `winterm_swarm_suggestions`, `winterm_swarm_status`.
 
 ---
 
@@ -70,3 +71,31 @@ To conserve system resources, minimize disk I/O, and eliminate script bloat:
 3. **Automated Enforcement**:
    - WinTerM's `ScriptJustificationGate` automatically intercepts single atomic commands, rejects script creation, and instructs direct terminal execution.
    - For recurring multi-step tasks, the candidate buffer auto-detects recurrence ($\ge 2$ runs) and compiles defensive playbooks with LRU quota management (max 50).
+
+---
+
+## Multi-Agent Swarm Orchestration & Layered Safety
+
+WinTerM provides a decentralized sub-agent swarm coordinated by the main agent with strict capability scoping and a shared blackboard message board:
+
+1. **Sub-Agent Dispatching & Privilege Scopes**:
+   - Dispatch sub-agents dynamically with `winterm_swarm_dispatch(name, privilege, goal)`.
+   - **Scopes**:
+     - `READ_ONLY_AUDIT`: Strictly diagnostic inspection; filesystem modifications and process kills blocked.
+     - `UI_OPERATOR`: Desktop UI automation and interaction; terminal shells restricted.
+     - `TERMINAL_EXECUTOR`: PowerShell and CMD command execution with safety bounds.
+     - `NETWORK_INSPECTOR`: Network diagnostics and port scanning; no desktop clicks.
+     - `FULL_SUPERVISOR`: Unrestricted administrative oversight across terminal and GUI.
+2. **Shared Message Board (Blackboard Architecture)**:
+   - All sub-agents and the main agent share an in-memory message bus (`winterm_swarm_board_read`, `winterm_swarm_board_post`).
+   - Message types: `DIRECTIVE`, `PROGRESS_UPDATE`, `TASK_COMPLETED`, `TASK_FAILED`, `SUGGESTION_PROPOSED`, `ALERT`, `STATUS_REPORT`.
+   - Main agent broadcasts high-level directives; sub-agents report progress and post structured telemetry.
+3. **Proactive Suggestions Pipeline**:
+   - Sub-agents autonomously identify optimizations, potential hazards, and needed remediations.
+   - Suggestions are submitted to the board for main agent oversight (`winterm_swarm_suggestions(action="review")`).
+   - Main agent retains deterministic approval authority (`action="approve"` or `action="reject"`).
+4. **Layered Fault-Tolerant Safety & Fluke Containment**:
+   - **SubAgentSandbox**: Every sub-agent action is bounded by maximum step quotas, execution timeouts, and action category fences.
+   - **Fluke Containment**: Unhandled OS exceptions, API timeouts, or unexpected glitches are caught and isolated (`fluke_contained=True`). An isolated sub-agent fluke **never crashes the main agent or sister sub-agents**.
+   - **Circuit Breakers**: Repeated failures trip the circuit breaker, automatically isolating the faulty sub-agent, logging a diagnostic fault record to the message board, and alerting the supervisor.
+

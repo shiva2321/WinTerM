@@ -10,6 +10,7 @@ from winterm.knowledge.error_catalog import WindowsErrorCatalog
 from winterm.knowledge.shell_matrix import ShellMatrix
 from winterm.knowledge.reliability_rules import ReliabilityRules
 from winterm.playbooks.gate import ScriptJustificationGate
+from winterm.swarm.models import MessageType, AgentPrivilege
 
 
 # Shared singleton agent instance for tool executions
@@ -673,6 +674,88 @@ def winterm_playbook_prune(max_items: int = 30) -> Dict[str, Any]:
     }
 
 
+# =============================================================================
+# MULTI-AGENT SWARM & MESSAGE BOARD COORDINATION TOOLS
+# =============================================================================
+
+def winterm_swarm_dispatch(tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Dispatches a fleet of autonomous sub-agents with scoped capability privileges.
+    
+    Args:
+        tasks: List of sub-agent task definitions, each with 'name', 'goal', and 'privilege'
+               ('read_only_audit', 'ui_operator', 'terminal_executor', 'network_inspector', 'full_supervisor').
+    """
+    return _agent_instance.dispatch_swarm(tasks)
+
+
+def winterm_swarm_board_read(filter_type: Optional[str] = None, limit: int = 30) -> List[Dict[str, Any]]:
+    """Reads recent messages, updates, and alerts from the shared Swarm Message Board.
+    
+    Args:
+        filter_type: Optional message filter ('task_assignment', 'progress_update', 'task_completed',
+                     'task_failed', 'suggestion', 'alert', 'directive').
+        limit: Max number of recent messages to return.
+    """
+    f_type = None
+    if filter_type:
+        try:
+            f_type = MessageType(filter_type)
+        except ValueError:
+            pass
+    messages = _agent_instance.swarm.board.get_messages(filter_type=f_type, limit=limit)
+    return [m.model_dump() for m in messages]
+
+
+def winterm_swarm_board_post(directive: str, recipient_id: str = "broadcast") -> Dict[str, Any]:
+    """Posts an instruction, directive, or announcement from the main agent to the Swarm Message Board.
+    
+    Args:
+        directive: The instruction text or command payload.
+        recipient_id: 'broadcast' for all sub-agents, or a specific sub-agent ID.
+    """
+    msg = _agent_instance.swarm.broadcast_directive(
+        directive=directive,
+        target_agent_id=None if recipient_id == "broadcast" else recipient_id,
+    )
+    return msg.model_dump()
+
+
+def winterm_swarm_suggestions(
+    action: str = "list",
+    suggestion_id: Optional[str] = None,
+    execute_now: bool = True,
+    reason: str = "",
+) -> Dict[str, Any]:
+    """Supervises, reviews, approves, or rejects proactive suggestions submitted by autonomous sub-agents.
+    
+    Args:
+        action: 'list' (view pending suggestions), 'approve' (approve suggestion), or 'reject' (reject suggestion).
+        suggestion_id: ID of the suggestion to approve or reject.
+        execute_now: If True and action is 'approve', executes the proposed action immediately.
+        reason: Optional explanation if rejecting a suggestion.
+    """
+    if action == "list":
+        return {
+            "pending_suggestions": _agent_instance.review_swarm_suggestions()
+        }
+    elif action == "approve":
+        if not suggestion_id:
+            return {"approved": False, "error": "suggestion_id is required for approval."}
+        return _agent_instance.approve_swarm_suggestion(suggestion_id=suggestion_id, execute_now=execute_now)
+    elif action == "reject":
+        if not suggestion_id:
+            return {"rejected": False, "error": "suggestion_id is required for rejection."}
+        success = _agent_instance.reject_swarm_suggestion(suggestion_id=suggestion_id, reason=reason)
+        return {"rejected": success, "suggestion_id": suggestion_id}
+    else:
+        return {"error": f"Unknown action '{action}'. Valid actions: 'list', 'approve', 'reject'."}
+
+
+def winterm_swarm_status() -> Dict[str, Any]:
+    """Returns the operational telemetry of the swarm, active sub-agents, circuit-breaker states, and fault records."""
+    return _agent_instance.get_swarm_status()
+
+
 # Tool JSON Schema for LLM Function Calling (OpenAI / Gemini / Anthropic)
 EXPORTED_TOOLS_SCHEMA = [
     {
@@ -1271,6 +1354,102 @@ EXPORTED_TOOLS_SCHEMA = [
                 "properties": {
                     "max_items": {"type": "integer", "default": 30, "description": "The target maximum number of active playbooks to retain."},
                 },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "winterm_swarm_dispatch",
+            "description": "Dispatches a fleet of autonomous sub-agents with scoped capability privileges for parallel or sequenced execution.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "tasks": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "name": {"type": "string", "description": "Human-readable name of the sub-agent."},
+                                "goal": {"type": "string", "description": "Specific sub-goal assigned to the sub-agent."},
+                                "privilege": {
+                                    "type": "string",
+                                    "enum": ["read_only_audit", "ui_operator", "terminal_executor", "network_inspector", "full_supervisor"],
+                                    "default": "read_only_audit",
+                                    "description": "Authorized privilege boundary tier.",
+                                },
+                            },
+                            "required": ["name", "goal"],
+                        },
+                        "description": "List of sub-agent specifications.",
+                    },
+                },
+                "required": ["tasks"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "winterm_swarm_board_read",
+            "description": "Reads recent messages, status reports, and alerts from the shared Swarm Message Board.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "filter_type": {
+                        "type": "string",
+                        "enum": ["task_assignment", "progress_update", "task_completed", "task_failed", "suggestion", "alert", "directive"],
+                        "description": "Optional filter for message category.",
+                    },
+                    "limit": {"type": "integer", "default": 30, "description": "Maximum number of recent messages to return."},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "winterm_swarm_board_post",
+            "description": "Posts an instruction, directive, or announcement from the main agent to the Swarm Message Board.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "directive": {"type": "string", "description": "The instruction text or command payload."},
+                    "recipient_id": {"type": "string", "default": "broadcast", "description": "'broadcast' or specific target sub-agent ID."},
+                },
+                "required": ["directive"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "winterm_swarm_suggestions",
+            "description": "Supervises, reviews, approves, or rejects proactive suggestions submitted by autonomous sub-agents.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["list", "approve", "reject"],
+                        "default": "list",
+                        "description": "Action to perform on suggestions.",
+                    },
+                    "suggestion_id": {"type": "string", "description": "ID of the suggestion to approve or reject."},
+                    "execute_now": {"type": "boolean", "default": True, "description": "If True and approving, immediately executes the suggestion."},
+                    "reason": {"type": "string", "description": "Optional explanation when rejecting a suggestion."},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "winterm_swarm_status",
+            "description": "Returns operational telemetry of the swarm, active sub-agents, circuit-breaker states, and fault records.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
             },
         },
     },

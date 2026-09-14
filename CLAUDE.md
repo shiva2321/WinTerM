@@ -58,6 +58,12 @@ When tasked with executing commands or automating desktop applications on Window
    - **DO NOT** hardcode fixed paths like `C:\Windows\System32\mspaint.exe`.
    - Use the generic toolkit MCP tools instead.
 
+4. **Multi-Agent Swarm Orchestration**:
+   - For delegating complex or parallel background tasks: use `winterm_swarm_dispatch` to spawn scoped sub-agents.
+   - For coordination: inspect the shared blackboard via `winterm_swarm_board_read` and broadcast supervisor directives with `winterm_swarm_board_post`.
+   - For sub-agent recommendations: monitor `winterm_swarm_suggestions` and approve/reject actions safely.
+   - All sub-agent actions execute within a layered safety sandbox and circuit-breaker fence, guaranteeing that sub-agent flukes or exceptions never destabilize the primary agent session.
+
 ---
 
 ## Common Development Commands
@@ -79,6 +85,9 @@ winterm subsystems
 winterm app find "notepad"
 winterm window list
 winterm screen state
+winterm swarm dispatch "Auditor" --privilege read_only_audit --goal "Inspect services"
+winterm swarm status
+winterm swarm board
 ```
 
 ### Run MCP Server (Stdio)

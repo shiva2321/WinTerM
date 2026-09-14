@@ -909,6 +909,142 @@ def playbook_prune(
     console.print(f"[green][OK] Pruned {purged} playbooks. Current active playbooks: {len(agent.list_playbooks())}[/green]")
 
 
+# =============================================================================
+# SWARM COORDINATION & SUB-AGENT CLI
+# =============================================================================
+
+swarm_cli = typer.Typer(
+    help="Multi-Agent Swarm coordination, scoped sub-agent dispatching, and Message Board oversight."
+)
+app.add_typer(swarm_cli, name="swarm")
+
+
+@swarm_cli.command("dispatch")
+def swarm_dispatch(
+    goal: str = typer.Argument(..., help="Sub-goal to assign to the sub-agent"),
+    name: str = typer.Option("Worker", "--name", "-n", help="Name of the sub-agent"),
+    privilege: str = typer.Option("read_only_audit", "--privilege", "-p", help="Privilege tier (read_only_audit, ui_operator, terminal_executor, network_inspector, full_supervisor)"),
+):
+    """Dispatches an autonomous sub-agent with a scoped privilege boundary."""
+    from winterm.swarm import AgentPrivilege
+    agent = WinTermAgent()
+    try:
+        priv_enum = AgentPrivilege(privilege)
+    except ValueError:
+        console.print(f"[red]Invalid privilege tier: {privilege}. Choose from: {[p.value for p in AgentPrivilege]}[/red]")
+        return
+
+    worker = agent.swarm.dispatch_subagent(name=name, goal=goal, privilege=priv_enum)
+    console.print(f"[bold green][OK] Dispatched Sub-Agent:[/bold green] {worker.name} (ID: {worker.agent_id})")
+    console.print(f"  [cyan]Privilege Tier:[/cyan] {worker.privilege.value}")
+    console.print(f"  [cyan]Goal:[/cyan] {goal}")
+    console.print(f"  [cyan]Allowed Categories:[/cyan] {[c.value for c in worker.scope.allowed_action_categories]}")
+
+
+@swarm_cli.command("status")
+def swarm_status():
+    """Displays live swarm telemetry, active sub-agents, circuit-breaker states, and fault records."""
+    agent = WinTermAgent()
+    status = agent.get_swarm_status()
+
+    console.print(Panel(
+        f"[bold cyan]Active Sub-Agents:[/bold cyan] {status['active_agents_count']}\n"
+        f"[bold cyan]Pending Suggestions:[/bold cyan] {status['pending_suggestions_count']}\n"
+        f"[bold cyan]Recent Faults Captured:[/bold cyan] {status['recent_faults_count']}",
+        title="WinTerM Swarm Telemetry",
+        border_style="cyan",
+    ))
+
+    if status["agents"]:
+        table = Table(title="Sub-Agent Fleet", border_style="blue")
+        table.add_column("Agent ID", style="dim")
+        table.add_column("Name", style="bold")
+        table.add_column("Privilege", style="yellow")
+        table.add_column("Status", style="green")
+        table.add_column("Steps", justify="right")
+        table.add_column("Faults", justify="right")
+        table.add_column("Isolated", style="bold red")
+
+        for a in status["agents"]:
+            table.add_row(
+                a["agent_id"],
+                a["name"],
+                a["privilege"],
+                a["status"],
+                str(a["steps_executed"]),
+                str(a["faults_count"]),
+                "YES" if a["is_isolated"] else "No",
+            )
+        console.print(table)
+
+
+@swarm_cli.command("board")
+def swarm_board(
+    limit: int = typer.Option(20, "--limit", "-l", help="Number of recent messages to display"),
+    filter_type: Optional[str] = typer.Option(None, "--type", "-t", help="Filter by message type"),
+):
+    """Displays recent communication records from the Swarm Message Board."""
+    from winterm.swarm import MessageType
+    agent = WinTermAgent()
+    f_type = None
+    if filter_type:
+        try:
+            f_type = MessageType(filter_type)
+        except ValueError:
+            pass
+
+    msgs = agent.swarm.board.get_messages(filter_type=f_type, limit=limit)
+    if not msgs:
+        console.print("[yellow]Swarm Message Board is currently empty.[/yellow]")
+        return
+
+    table = Table(title=f"Swarm Message Board (Last {len(msgs)} records)", border_style="green")
+    table.add_column("Sender", style="bold cyan")
+    table.add_column("Type", style="yellow")
+    table.add_column("Content", style="white")
+
+    for m in msgs:
+        table.add_row(m.sender_id, m.message_type.value, m.content)
+    console.print(table)
+
+
+@swarm_cli.command("suggestions")
+def swarm_suggestions(
+    action: str = typer.Argument("list", help="'list', 'approve', or 'reject'"),
+    suggestion_id: Optional[str] = typer.Option(None, "--id", help="Suggestion ID to approve or reject"),
+):
+    """Views, approves, or rejects proactive suggestions submitted by autonomous sub-agents."""
+    agent = WinTermAgent()
+    if action == "list":
+        sugs = agent.review_swarm_suggestions()
+        if not sugs:
+            console.print("[green]No pending sub-agent suggestions awaiting review.[/green]")
+            return
+        table = Table(title="Pending Sub-Agent Suggestions", border_style="yellow")
+        table.add_column("ID", style="bold")
+        table.add_column("Proposing Agent", style="cyan")
+        table.add_column("Title", style="bold white")
+        table.add_column("Proposed Action", style="green")
+        for s in sugs:
+            table.add_row(s["suggestion_id"], s["proposing_agent_name"], s["title"], s["proposed_action"])
+        console.print(table)
+    elif action == "approve":
+        if not suggestion_id:
+            console.print("[red]Error: --id is required to approve a suggestion.[/red]")
+            return
+        res = agent.approve_swarm_suggestion(suggestion_id)
+        if res.get("approved"):
+            console.print(f"[green][OK] Approved and executed suggestion '{suggestion_id}'.[/green]")
+        else:
+            console.print(f"[red][X] Failed to approve: {res.get('error')}[/red]")
+    elif action == "reject":
+        if not suggestion_id:
+            console.print("[red]Error: --id is required to reject a suggestion.[/red]")
+            return
+        agent.reject_swarm_suggestion(suggestion_id)
+        console.print(f"[yellow]Rejected suggestion '{suggestion_id}'.[/yellow]")
+
+
 if __name__ == "__main__":
     app()
 

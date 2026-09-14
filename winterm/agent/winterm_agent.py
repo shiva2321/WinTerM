@@ -25,6 +25,7 @@ from winterm.subsystems.desktop_gui import DesktopGuiSubsystem
 from winterm.graph.engine import WindowsKnowledgeGraph
 from winterm.graph.schema import BlastRadiusReport, RemediationPath, ParameterValidationResult
 from winterm.agent.session import AgentSession
+from winterm.swarm import SwarmCoordinator, AgentPrivilege, AgentScope, SwarmSuggestion
 
 
 class WinTermAgent:
@@ -53,6 +54,7 @@ class WinTermAgent:
         self.healer = ErrorHealer(executor=self.executor, graph=self.knowledge_graph)
         self.learner = AppLearner(executor=self.executor, knowledge_graph=self.knowledge_graph)
         self.playbooks = PlaybookManager(storage_dir=playbook_storage_dir, executor=self.executor)
+        self.swarm = SwarmCoordinator(executor=self.executor)
 
     def plan(self, goal: str) -> ExecutionPlan:
         """Decomposes a user goal into a structured, ordered ExecutionPlan (The WHAT)."""
@@ -478,6 +480,35 @@ class WinTermAgent:
     def prune_playbooks(self, max_items: int = 30) -> int:
         """Prunes stale or least recently used playbooks down to max_items."""
         return self.playbooks.prune_playbooks(max_items=max_items)
+
+    # =========================================================================
+    # MULTI-AGENT SWARM ORCHESTRATION & SUPERVISION
+    # =========================================================================
+
+    def dispatch_swarm(self, tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Dispatches a fleet of autonomous sub-agents with scoped privileges."""
+        return self.swarm.dispatch_swarm(tasks)
+
+    def get_swarm_status(self) -> Dict[str, Any]:
+        """Returns live swarm status, sub-agent telemetry, fault records, and pending suggestions."""
+        return self.swarm.get_swarm_status()
+
+    def broadcast_swarm_directive(self, directive: str, target_agent_id: Optional[str] = None) -> Dict[str, Any]:
+        """Broadcasts a directive to the swarm Message Board."""
+        msg = self.swarm.broadcast_directive(directive, target_agent_id=target_agent_id)
+        return msg.model_dump()
+
+    def review_swarm_suggestions(self) -> List[Dict[str, Any]]:
+        """Queries pending proactive suggestions submitted by autonomous sub-agents."""
+        return [s.model_dump() for s in self.swarm.review_suggestions()]
+
+    def approve_swarm_suggestion(self, suggestion_id: str, execute_now: bool = True) -> Dict[str, Any]:
+        """Approves and optionally executes a sub-agent proactive suggestion."""
+        return self.swarm.approve_suggestion(suggestion_id=suggestion_id, execute_now=execute_now)
+
+    def reject_swarm_suggestion(self, suggestion_id: str, reason: str = "") -> bool:
+        """Rejects a sub-agent suggestion with an explanatory rationale."""
+        return self.swarm.reject_suggestion(suggestion_id=suggestion_id, reason=reason)
 
 
 

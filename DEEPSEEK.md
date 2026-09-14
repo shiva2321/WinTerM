@@ -23,13 +23,14 @@ Add WinTerM to your DeepSeek agent configuration (via MCP or OpenAI-compatible t
 }
 ```
 
-WinTerM exports **41 production tools** organized into 6 functional layers:
+WinTerM exports **46 production tools** organized into 7 functional layers:
 1. **5W Cognitive Primitives**: `plan_terminal_task`, `explain_terminal_command`, `predict_command_impact`, `execute_terminal_command`, `diagnose_terminal_error`, `undo_last_terminal_action`.
 2. **Linux & WSL2 Subsystem**: `winterm_linux_execute`, `winterm_linux_path_convert`, `winterm_linux_distro_list`, `winterm_linux_safety_check`, `winterm_linux_diagnose_error`.
 3. **Knowledge Graph & Anti-Hallucination**: `winterm_graph_blast_radius`, `winterm_graph_validate_command`, `winterm_graph_remedy_error`, `winterm_graph_alternatives`, `winterm_graph_command_docs`, `winterm_graph_safety_check`.
 4. **Desktop GUI & Perception**: `winterm_app_find`, `winterm_app_launch`, `winterm_app_close`, `winterm_app_learn`, `winterm_window_list`, `winterm_window_focus`, `winterm_window_resize`, `winterm_window_close`.
 5. **UI Automation & Synthetic Input**: `winterm_ui_inspect`, `winterm_ui_click`, `winterm_ui_set_text`, `winterm_input_type`, `winterm_input_hotkey`, `winterm_input_mouse_click`, `winterm_input_mouse_drag`, `winterm_screen_state`, `winterm_screen_capture`.
 6. **Task Playbooks & Reusable Scripts**: `winterm_playbook_create`, `winterm_playbook_match_run`, `winterm_playbook_list`, `winterm_playbook_prune`.
+7. **Multi-Agent Swarm Orchestration**: `winterm_swarm_dispatch`, `winterm_swarm_board_read`, `winterm_swarm_board_post`, `winterm_swarm_suggestions`, `winterm_swarm_status`.
 
 ---
 
@@ -76,3 +77,20 @@ DeepSeek agents frequently collaborate with **Gemini**, **Claude Code**, or **Op
 - **Resource Locking**: Before binding a network port or focusing an app window, check or acquire a lease via `AgentSessionCoordinator`.
 - **Independent Sessions**: DeepSeek instances should pass a unique `session_id` (e.g. `deepseek-worker-1`) to isolate undo stacks and execution history.
 - **Shared Knowledge Graph**: All agents share the cached 10,374-node Windows Knowledge Graph in memory for zero-overhead validation.
+
+---
+
+## Swarm Sub-Agent Delegation & Fluke Immunity
+
+When running complex background workloads or parallel diagnostics:
+1. **Delegate with Scoped Boundaries**:
+   - Dispatch sub-agents using `winterm_swarm_dispatch(name, privilege, goal)`.
+   - Choose the least-privilege role (`READ_ONLY_AUDIT`, `UI_OPERATOR`, `TERMINAL_EXECUTOR`, `NETWORK_INSPECTOR`) to guarantee sub-agents never venture outside their operational remit.
+2. **Monitor the Message Board**:
+   - Coordinate actions without cross-thread race conditions via `winterm_swarm_board_read` and `winterm_swarm_board_post`.
+3. **Evaluate Autonomous Suggestions**:
+   - Sub-agents post suggestions to the board. Review pending ideas via `winterm_swarm_suggestions(action="review")` and approve/reject systematically.
+4. **Guaranteed System Stability (Fluke Immunity)**:
+   - WinTerM encapsulates each sub-agent in a `SubAgentSandbox` backed by an automatic `CircuitBreaker`.
+   - Any transient failure, timeout, or OS fluke is contained locally (`fluke_contained=True`), ensuring no sub-agent error can ever crash the supervising agent or cause systemic cascading collapse.
+
