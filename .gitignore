@@ -65,3 +65,4 @@ scratch/
 session_logs/
 notepad_automation_session.json
 winterm_notepad_demo.txt
+.winterm/

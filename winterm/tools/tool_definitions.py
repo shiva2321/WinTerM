@@ -9,6 +9,7 @@ from winterm.knowledge.commands_db import WindowsCommandDatabase
 from winterm.knowledge.error_catalog import WindowsErrorCatalog
 from winterm.knowledge.shell_matrix import ShellMatrix
 from winterm.knowledge.reliability_rules import ReliabilityRules
+from winterm.playbooks.gate import ScriptJustificationGate
 
 
 # Shared singleton agent instance for tool executions
@@ -528,6 +529,148 @@ def winterm_linux_diagnose_error(
     if healing:
         return {"diagnosed": True, "proposal": healing.model_dump()}
     return {"diagnosed": False, "message": "No specific Linux error signature matched."}
+
+
+# =============================================================================
+# REUSABLE TASK PLAYBOOKS & SCRIPT GENERALIZATION TOOLS
+# =============================================================================
+
+def winterm_playbook_create(
+    goal: str,
+    commands: List[str],
+    target_shell: str = "powershell_51",
+    name: Optional[str] = None,
+    description: Optional[str] = None,
+    auto_promote: bool = True,
+    force_script: bool = False,
+) -> Dict[str, Any]:
+    """Generates a defensive task script and registers it in the playbook engine.
+    
+    Enforces the ScriptJustificationGate: Drops atomic one-liners, requiring direct execution
+    instead. Only creates scripts for multi-step workflows, control flow, loops, or rollback routines.
+    """
+    shell_enum = ShellType(target_shell) if target_shell in [s.value for s in ShellType] else ShellType.POWERSHELL_51
+    justification = ScriptJustificationGate.evaluate(goal, commands, shell=shell_enum, force_script=force_script)
+    if not justification.is_justified:
+        return {
+            "created": False,
+            "requires_script": False,
+            "reason": justification.reason,
+            "suggested_action": justification.suggested_action,
+            "guidance": (
+                "Atomic single-step commands must be run directly via execute_terminal_command or "
+                "winterm_linux_execute. Standalone scripts should only be synthesized for multi-step workflows, "
+                "branching logic, loops, or transactional rollbacks."
+            ),
+        }
+
+    if auto_promote:
+        playbook = _agent_instance.playbooks.create_playbook_from_task(
+            goal=goal,
+            commands=commands,
+            shell=shell_enum,
+            name=name,
+            description=description,
+            force_script=force_script,
+        )
+        return {
+            "created": True,
+            "requires_script": True,
+            "playbook_id": playbook.playbook_id,
+            "name": playbook.name,
+            "parameters": [p.model_dump() for p in playbook.parameters],
+            "script_body": playbook.script_body,
+            "safety_tier": playbook.safety_tier,
+        }
+    else:
+        pb = _agent_instance.playbooks.record_task_execution(
+            goal=goal,
+            commands=commands,
+            shell=shell_enum,
+            auto_promote=False,
+        )
+        return {
+            "created": pb is not None,
+            "requires_script": True,
+            "recorded_in_candidate_buffer": True,
+            "playbook_id": pb.playbook_id if pb else None,
+        }
+
+
+def winterm_playbook_match_run(
+    goal: str,
+    parameters: Optional[Dict[str, Any]] = None,
+    background: bool = False,
+) -> Dict[str, Any]:
+    """Matches a recurring situation against the playbook catalog, extracts parameters, and executes the generalized script.
+    
+    Args:
+        goal: The natural language objective (e.g. 'kill process using port 9000').
+        parameters: Optional explicit parameter overrides (e.g. {'port': 9000}).
+        background: If True runs command in background.
+    """
+    match_res = _agent_instance.playbooks.match_playbook(goal)
+    if not match_res.matched or not match_res.playbook:
+        return {
+            "matched": False,
+            "reason": match_res.reason,
+            "executed": False,
+        }
+
+    merged_params = match_res.extracted_params.copy()
+    if parameters:
+        merged_params.update(parameters)
+
+    exec_res = _agent_instance.playbooks.execute_playbook(
+        playbook_id=match_res.playbook.playbook_id,
+        parameters=merged_params,
+        background=background,
+    )
+    return {
+        "matched": True,
+        "playbook_id": match_res.playbook.playbook_id,
+        "playbook_name": match_res.playbook.name,
+        "parameters_used": merged_params,
+        "executed": True,
+        "success": exec_res.success,
+        "exit_code": exec_res.exit_code,
+        "stdout": exec_res.stdout,
+        "stderr": exec_res.stderr,
+    }
+
+
+def winterm_playbook_list() -> List[Dict[str, Any]]:
+    """Lists all stored, reusable task playbooks with parameter schemas, safety tiers, and execution counts."""
+    playbooks = _agent_instance.playbooks.list_playbooks()
+    return [
+        {
+            "playbook_id": pb.playbook_id,
+            "name": pb.name,
+            "description": pb.description,
+            "signature": pb.pattern_signature,
+            "target_shell": pb.target_shell.value,
+            "parameters": [p.model_dump() for p in pb.parameters],
+            "execution_count": pb.execution_count,
+            "success_count": pb.success_count,
+            "safety_tier": pb.safety_tier,
+        }
+        for pb in playbooks
+    ]
+
+
+def winterm_playbook_prune(max_items: int = 30) -> Dict[str, Any]:
+    """Prunes stale, least recently used playbooks down to max_items to prevent disk and resource waste.
+    
+    Args:
+        max_items: The target maximum number of active playbooks to retain.
+    """
+    purged = _agent_instance.playbooks.prune_playbooks(max_items=max_items)
+    remaining = len(_agent_instance.playbooks.list_playbooks())
+    return {
+        "purged_count": purged,
+        "remaining_playbooks": remaining,
+        "max_items": max_items,
+    }
 
 
 # Tool JSON Schema for LLM Function Calling (OpenAI / Gemini / Anthropic)
@@ -1071,5 +1214,66 @@ EXPORTED_TOOLS_SCHEMA = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "winterm_playbook_create",
+            "description": "Generates a defensive task script and registers it in the playbook engine. Generalizes literals into typed parameters if requested.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "goal": {"type": "string", "description": "The natural language objective of the routine."},
+                    "commands": {"type": "array", "items": {"type": "string"}, "description": "List of commands constituting the task."},
+                    "target_shell": {"type": "string", "default": "powershell_51", "description": "Target shell (powershell_51, pwsh, cmd, or bash)."},
+                    "name": {"type": "string", "description": "Optional human-readable title for the playbook."},
+                    "description": {"type": "string", "description": "Optional detailed description."},
+                    "auto_promote": {"type": "boolean", "default": True, "description": "If True, compiles and saves immediately as a persistent Playbook."},
+                    "force_script": {"type": "boolean", "default": False, "description": "If True, overrides the ScriptJustificationGate to synthesize a script even for atomic commands."},
+                },
+                "required": ["goal", "commands"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "winterm_playbook_match_run",
+            "description": "Matches a recurring situation against the playbook catalog, extracts parameters, and executes the generalized script.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "goal": {"type": "string", "description": "The natural language goal describing the task to execute."},
+                    "parameters": {"type": "object", "description": "Optional explicit parameter overrides dictionary."},
+                    "background": {"type": "boolean", "default": False, "description": "If True, runs the playbook in the background."},
+                },
+                "required": ["goal"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "winterm_playbook_list",
+            "description": "Lists all stored, reusable task playbooks with parameter schemas, safety tiers, and execution telemetry.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "winterm_playbook_prune",
+            "description": "Prunes stale, least recently used playbooks down to max_items to prevent disk and resource waste.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "max_items": {"type": "integer", "default": 30, "description": "The target maximum number of active playbooks to retain."},
+                },
+            },
+        },
+    },
 ]
+
 

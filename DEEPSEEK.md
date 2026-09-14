@@ -23,12 +23,13 @@ Add WinTerM to your DeepSeek agent configuration (via MCP or OpenAI-compatible t
 }
 ```
 
-WinTerM exports **37 production tools** organized into 5 functional layers:
+WinTerM exports **41 production tools** organized into 6 functional layers:
 1. **5W Cognitive Primitives**: `plan_terminal_task`, `explain_terminal_command`, `predict_command_impact`, `execute_terminal_command`, `diagnose_terminal_error`, `undo_last_terminal_action`.
 2. **Linux & WSL2 Subsystem**: `winterm_linux_execute`, `winterm_linux_path_convert`, `winterm_linux_distro_list`, `winterm_linux_safety_check`, `winterm_linux_diagnose_error`.
 3. **Knowledge Graph & Anti-Hallucination**: `winterm_graph_blast_radius`, `winterm_graph_validate_command`, `winterm_graph_remedy_error`, `winterm_graph_alternatives`, `winterm_graph_command_docs`, `winterm_graph_safety_check`.
 4. **Desktop GUI & Perception**: `winterm_app_find`, `winterm_app_launch`, `winterm_app_close`, `winterm_app_learn`, `winterm_window_list`, `winterm_window_focus`, `winterm_window_resize`, `winterm_window_close`.
 5. **UI Automation & Synthetic Input**: `winterm_ui_inspect`, `winterm_ui_click`, `winterm_ui_set_text`, `winterm_input_type`, `winterm_input_hotkey`, `winterm_input_mouse_click`, `winterm_input_mouse_drag`, `winterm_screen_state`, `winterm_screen_capture`.
+6. **Task Playbooks & Reusable Scripts**: `winterm_playbook_create`, `winterm_playbook_match_run`, `winterm_playbook_list`, `winterm_playbook_prune`.
 
 ---
 
@@ -62,6 +63,10 @@ When formulating reasoning traces in your `<think>` blocks, structure your deduc
    - When automating desktop applications, NEVER calculate blind screen coordinates.
    - Use `winterm_ui_inspect(window)` to get real `AutomationId` or element names.
    - Click semantically with `winterm_ui_click(window, element_query)`.
+5. **Script Justification Rule (Anti-Bloat Guard)**:
+   - NEVER generate or request scripts for atomic single-line commands (`Get-Process`, `ipconfig`, `ls -la`, `docker ps`, `Stop-Process -Id 1234`). Execute them directly via `execute_terminal_command` or `winterm_linux_execute`.
+   - ONLY synthesize standalone scripts (`winterm_playbook_create`) when multi-step orchestration ($\ge 2$ commands), conditional branching (`if/else`), loops (`for/while`), or transactional error recovery (`try/catch`) is strictly required.
+   - WinTerM's `ScriptJustificationGate` automatically enforces this rule.
 
 ---
 

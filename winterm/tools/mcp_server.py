@@ -41,6 +41,10 @@ from winterm.tools.tool_definitions import (
     winterm_linux_distro_list,
     winterm_linux_safety_check,
     winterm_linux_diagnose_error,
+    winterm_playbook_create,
+    winterm_playbook_match_run,
+    winterm_playbook_list,
+    winterm_playbook_prune,
     EXPORTED_TOOLS_SCHEMA,
 )
 
@@ -112,6 +116,10 @@ class WinTermMCPServer:
             "winterm_linux_distro_list": winterm_linux_distro_list,
             "winterm_linux_safety_check": winterm_linux_safety_check,
             "winterm_linux_diagnose_error": winterm_linux_diagnose_error,
+            "winterm_playbook_create": winterm_playbook_create,
+            "winterm_playbook_match_run": winterm_playbook_match_run,
+            "winterm_playbook_list": winterm_playbook_list,
+            "winterm_playbook_prune": winterm_playbook_prune,
         }
 
     def handle_request(self, req: Dict[str, Any]) -> Dict[str, Any]:

@@ -24,13 +24,14 @@ Add WinTerM to your Gemini agent's MCP configuration:
 }
 ```
 
-WinTerM exposes **37 production tools** covering:
+WinTerM exposes **41 production tools** covering:
 - **Core 5W Pipeline**: `plan_terminal_task`, `explain_terminal_command`, `predict_command_impact`, `execute_terminal_command`, `diagnose_terminal_error`, `undo_last_terminal_action`.
 - **Linux & WSL2**: `winterm_linux_execute`, `winterm_linux_path_convert`, `winterm_linux_distro_list`, `winterm_linux_safety_check`, `winterm_linux_diagnose_error`.
 - **Knowledge Graph**: `winterm_graph_blast_radius`, `winterm_graph_validate_command`, `winterm_graph_remedy_error`, `winterm_graph_alternatives`, `winterm_graph_command_docs`, `winterm_graph_safety_check`.
 - **Desktop Application Lifecycle**: `winterm_app_find`, `winterm_app_launch`, `winterm_app_close`, `winterm_app_learn`.
 - **Window Management**: `winterm_window_list`, `winterm_window_focus`, `winterm_window_resize`, `winterm_window_close`.
 - **UI Automation & Input**: `winterm_ui_inspect`, `winterm_ui_click`, `winterm_ui_set_text`, `winterm_input_type`, `winterm_input_hotkey`, `winterm_input_mouse_click`, `winterm_input_mouse_drag`, `winterm_screen_state`, `winterm_screen_capture`.
+- **Playbooks & Reusable Scripts**: `winterm_playbook_create`, `winterm_playbook_match_run`, `winterm_playbook_list`, `winterm_playbook_prune`.
 
 ---
 
@@ -68,3 +69,15 @@ When multiple agents (Gemini, DeepSeek, Claude Code, OpenCode) are operating con
   `AgentSessionCoordinator.acquire_resource_lock(resource_id="port:8080", session_id="gemini-run-1", framework="gemini")`
 - **Window Courtesy**: Do not close or minimize windows owned by other active agents. Inspect `winterm_window_list` before modifying window state.
 - **Session Ledger**: WinTerM maintains state timelines per session; avoid clobbering other agents' active undo stacks.
+
+---
+
+## Script Justification Protocol (Direct Terminal Execution vs. Playbooks)
+
+To maximize runtime efficiency and prevent script sprawl:
+1. **Direct Execution for Atomic Commands**:
+   - Never build or request a script for atomic commands (`Get-Process`, `ipconfig`, `ls -la`, `docker ps`, `Stop-Process -Id 1234`). Execute them directly with `execute_terminal_command` or `winterm_linux_execute`.
+2. **Script Synthesis Strict Criteria**:
+   - Only call `winterm_playbook_create` for tasks requiring multi-step orchestration ($\ge 2$ interdependent commands), conditional branches (`if/else`), loops (`for/while`), or transactional recovery (`try/catch`).
+3. **Automated Enforcement**:
+   - `ScriptJustificationGate` rejects atomic commands from being scripted, guiding you to direct execution while auto-promoting recurring multi-step tasks into parameter-generalized playbooks.

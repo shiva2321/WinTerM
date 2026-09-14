@@ -10,13 +10,14 @@ WinTerM equips AI agents with deterministic Windows Terminal and Linux/WSL2 mast
 ---
 
 ## Tool Availability
-When executing actions, use the **37 MCP tools** provided by WinTerM (`python -m winterm.tools.mcp_server`):
+When executing actions, use the **41 MCP tools** provided by WinTerM (`python -m winterm.tools.mcp_server`):
 - **Core 5W Pipeline**: `plan_terminal_task`, `explain_terminal_command`, `predict_command_impact`, `execute_terminal_command`, `diagnose_terminal_error`, `undo_last_terminal_action`.
 - **Linux & WSL2 Subsystem**: `winterm_linux_execute`, `winterm_linux_path_convert`, `winterm_linux_distro_list`, `winterm_linux_safety_check`, `winterm_linux_diagnose_error`.
 - **Knowledge Graph**: `winterm_graph_blast_radius`, `winterm_graph_validate_command`, `winterm_graph_remedy_error`, `winterm_graph_alternatives`, `winterm_graph_command_docs`, `winterm_graph_safety_check`.
 - **Application Lifecycle**: `winterm_app_find`, `winterm_app_launch`, `winterm_app_close`, `winterm_app_learn`.
 - **Window Management**: `winterm_window_list`, `winterm_window_focus`, `winterm_window_resize`, `winterm_window_close`.
 - **UI Automation & Input**: `winterm_ui_inspect`, `winterm_ui_click`, `winterm_ui_set_text`, `winterm_input_type`, `winterm_input_hotkey`, `winterm_input_mouse_click`, `winterm_input_mouse_drag`, `winterm_screen_state`, `winterm_screen_capture`.
+- **Playbooks & Reusable Scripts**: `winterm_playbook_create`, `winterm_playbook_match_run`, `winterm_playbook_list`, `winterm_playbook_prune`.
 
 ---
 
@@ -53,3 +54,19 @@ When running alongside other agents (e.g. Gemini, DeepSeek, Claude Code, OpenCod
 1. **Resource Locking**: Acquire a lease on shared resources (e.g. ports, exclusive windows) using `AgentSessionCoordinator`.
 2. **Window Courtesy**: Never arbitrarily close or minimize windows opened by another agent.
 3. **Isolated Undo Stacks**: Each agent maintains a dedicated session ID to ensure rollback actions don't interfere with other running agents.
+
+---
+
+## Script Justification Protocol (Direct Execution vs. Script Synthesis)
+To conserve system resources, minimize disk I/O, and eliminate script bloat:
+1. **Never build scripts for atomic one-liners**:
+   - Single commands (e.g. `ipconfig`, `Get-Process`, `ls -la`, `docker ps`, `Stop-Process -Id 1234`, `git status`) MUST be executed directly via `execute_terminal_command` or `winterm_linux_execute`.
+2. **Only synthesize scripts when strictly necessary**:
+   - A task qualifies for script generation (`winterm_playbook_create`) **only and strictly if**:
+     - It requires multi-step workflow sequencing ($\ge 2$ interdependent commands).
+     - It requires conditional branching (`if/else`, `switch`, `case`).
+     - It requires iterative loops (`foreach`, `while`, `for`).
+     - It requires transactional error handling or compensation rollback (`try/catch/finally`, `trap`).
+3. **Automated Enforcement**:
+   - WinTerM's `ScriptJustificationGate` automatically intercepts single atomic commands, rejects script creation, and instructs direct terminal execution.
+   - For recurring multi-step tasks, the candidate buffer auto-detects recurrence ($\ge 2$ runs) and compiles defensive playbooks with LRU quota management (max 50).

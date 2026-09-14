@@ -19,6 +19,8 @@ from winterm.cognition.predictor import ImpactPredictor
 from winterm.cognition.verifier import StateVerifier
 from winterm.cognition.healer import ErrorHealer
 from winterm.cognition.app_learner import AppLearner
+from winterm.playbooks.manager import PlaybookManager
+from winterm.playbooks.models import Playbook, PlaybookMatchResult
 from winterm.subsystems.desktop_gui import DesktopGuiSubsystem
 from winterm.graph.engine import WindowsKnowledgeGraph
 from winterm.graph.schema import BlastRadiusReport, RemediationPath, ParameterValidationResult
@@ -34,6 +36,7 @@ class WinTermAgent:
         context: Optional[SystemContext] = None,
         default_shell: ShellType = ShellType.POWERSHELL_51,
         graph: Optional[WindowsKnowledgeGraph] = None,
+        playbook_storage_dir: Optional[str] = None,
     ):
         self.context = context or WindowsEnvironment.probe()
         self.session = AgentSession(session_id=session_id or f"session-{uuid.uuid4().hex[:8]}")
@@ -49,6 +52,7 @@ class WinTermAgent:
         self.verifier = StateVerifier(executor=self.executor)
         self.healer = ErrorHealer(executor=self.executor, graph=self.knowledge_graph)
         self.learner = AppLearner(executor=self.executor, knowledge_graph=self.knowledge_graph)
+        self.playbooks = PlaybookManager(storage_dir=playbook_storage_dir, executor=self.executor)
 
     def plan(self, goal: str) -> ExecutionPlan:
         """Decomposes a user goal into a structured, ordered ExecutionPlan (The WHAT)."""
@@ -426,6 +430,55 @@ class WinTermAgent:
     def learn_application(self, app_or_command: str) -> Dict[str, Any]:
         """Probes, analyzes, and learns how to operate any Windows application or CLI utility."""
         return self.learner.learn(app_or_command)
+
+    # =========================================================================
+    # REUSABLE TASK PLAYBOOK & SCRIPT GENERALIZATION HELPERS
+    # =========================================================================
+
+    def create_playbook(
+        self,
+        goal: str,
+        commands: List[str],
+        shell: ShellType = ShellType.POWERSHELL_51,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        force_script: bool = False,
+    ) -> Playbook:
+        """Explicitly generalizes a sequence of task commands into a persistent, reusable Playbook."""
+        return self.playbooks.create_playbook_from_task(
+            goal=goal,
+            commands=commands,
+            shell=shell,
+            name=name,
+            description=description,
+            force_script=force_script,
+        )
+
+    def match_playbook(self, goal: str) -> PlaybookMatchResult:
+        """Finds a matching generalized playbook for a given goal and extracts parameters."""
+        return self.playbooks.match_playbook(goal)
+
+    def execute_playbook(
+        self,
+        playbook_id: str,
+        parameters: Optional[Dict[str, Any]] = None,
+        background: bool = False,
+    ) -> ExecutionResult:
+        """Executes a generalized playbook routine with supplied or extracted parameters."""
+        return self.playbooks.execute_playbook(
+            playbook_id=playbook_id,
+            parameters=parameters,
+            background=background,
+        )
+
+    def list_playbooks(self) -> List[Playbook]:
+        """Returns all registered playbooks sorted by recency."""
+        return self.playbooks.list_playbooks()
+
+    def prune_playbooks(self, max_items: int = 30) -> int:
+        """Prunes stale or least recently used playbooks down to max_items."""
+        return self.playbooks.prune_playbooks(max_items=max_items)
+
 
 
 

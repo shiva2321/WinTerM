@@ -815,8 +815,103 @@ def screen_capture(
     console.print(res.stdout or res.stderr, markup=False)
 
 
+# =============================================================================
+# REUSABLE TASK PLAYBOOKS CLI (LIST, RUN, PRUNE)
+# =============================================================================
+playbook_cli = typer.Typer(help="Reusable Task Playbooks, Generalization, and Fast-Path Background Execution.")
+app.add_typer(playbook_cli, name="playbook")
+
+
+@playbook_cli.command("list")
+def playbook_list():
+    """Lists all stored, reusable task playbooks, parameters, and execution stats."""
+    agent = WinTermAgent()
+    playbooks = agent.list_playbooks()
+    if not playbooks:
+        console.print("[yellow]No playbooks currently registered. Tasks promote to playbooks upon recurring execution.[/yellow]")
+        return
+
+    table = Table(title="WinTerM Reusable Task Playbooks", border_style="cyan")
+    table.add_column("Playbook ID", style="bold cyan")
+    table.add_column("Name", style="bold white")
+    table.add_column("Shell", style="yellow")
+    table.add_column("Parameters", style="magenta")
+    table.add_column("Runs", style="green")
+    table.add_column("Tier", style="red")
+
+    for pb in playbooks:
+        param_str = ", ".join([f"{p.name} ({p.param_type})" for p in pb.parameters]) or "none"
+        table.add_row(
+            pb.playbook_id,
+            escape(pb.name),
+            pb.target_shell.value,
+            param_str,
+            str(pb.execution_count),
+            pb.safety_tier,
+        )
+    console.print(table)
+
+
+@playbook_cli.command("run")
+def playbook_run(
+    playbook_id: str = typer.Argument(..., help="Playbook ID or natural language goal to match"),
+    params: Optional[str] = typer.Option(None, "--params", "-p", help="JSON dictionary of parameters"),
+    background: bool = typer.Option(False, "--background", "-b", help="Execute in the background"),
+):
+    """Executes a generalized playbook directly or matches a natural goal to run."""
+    import json
+    agent = WinTermAgent()
+
+    parsed_params = {}
+    if params:
+        try:
+            parsed_params = json.loads(params)
+        except Exception:
+            console.print(f"[red]Error: Invalid JSON passed to --params: {params}[/red]")
+            return
+
+    # If playbook_id exists directly
+    existing_pbs = {pb.playbook_id: pb for pb in agent.list_playbooks()}
+    if playbook_id in existing_pbs:
+        console.print(f"[cyan]Executing playbook '{playbook_id}'...[/cyan]")
+        res = agent.execute_playbook(playbook_id, parameters=parsed_params, background=background)
+        if res.success:
+            console.print(f"[green][OK] Executed successfully:[/green]\n{res.stdout}")
+        else:
+            console.print(f"[red][X] Execution failed (exit {res.exit_code}):[/red]\n{res.stderr}")
+        return
+
+    # Otherwise treat as a natural language goal to match
+    console.print(f"[cyan]Matching goal '{playbook_id}' against playbook catalog...[/cyan]")
+    match_res = agent.match_playbook(playbook_id)
+    if match_res.matched and match_res.playbook:
+        console.print(f"[green]Matched playbook '{match_res.playbook.playbook_id}' ({match_res.playbook.name}) [Confidence: {match_res.confidence}][/green]")
+        merged = match_res.extracted_params.copy()
+        merged.update(parsed_params)
+        if merged:
+            console.print(f"[yellow]Parameters extracted:[/yellow] {merged}")
+        res = agent.execute_playbook(match_res.playbook.playbook_id, parameters=merged, background=background)
+        if res.success:
+            console.print(f"[green][OK] Executed successfully:[/green]\n{res.stdout}")
+        else:
+            console.print(f"[red][X] Execution failed (exit {res.exit_code}):[/red]\n{res.stderr}")
+    else:
+        console.print(f"[yellow]No matching playbook found for '{playbook_id}'. Run 'winterm plan \"{playbook_id}\"' instead.[/yellow]")
+
+
+@playbook_cli.command("prune")
+def playbook_prune(
+    max_items: int = typer.Option(30, "--max-items", "-m", help="Maximum active playbooks to keep"),
+):
+    """Prunes stale or least recently used playbooks down to max_items to prevent disk waste."""
+    agent = WinTermAgent()
+    purged = agent.prune_playbooks(max_items=max_items)
+    console.print(f"[green][OK] Pruned {purged} playbooks. Current active playbooks: {len(agent.list_playbooks())}[/green]")
+
+
 if __name__ == "__main__":
     app()
+
 
 
 
