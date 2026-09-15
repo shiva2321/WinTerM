@@ -3,6 +3,7 @@
 import os
 import time
 import uuid
+import json
 from typing import Optional, List, Dict, Any, Tuple
 from winterm.models.intent import ExecutionPlan, PlanStep, StepStatus
 from winterm.models.impact import PredictedImpact, RiskLevel, RollbackAction
@@ -27,6 +28,7 @@ from winterm.graph.engine import WindowsKnowledgeGraph
 from winterm.graph.schema import BlastRadiusReport, RemediationPath, ParameterValidationResult
 from winterm.agent.session import AgentSession
 from winterm.swarm import SwarmCoordinator, AgentPrivilege, AgentScope, SwarmSuggestion
+from winterm.interaction.mental_map import ScreenMentalMap
 
 
 class WinTermAgent:
@@ -486,8 +488,8 @@ class WinTermAgent:
             try:
                 raw_json = json.loads(exec_res.stdout)
                 parsed_tree = SemanticAccessibilityTree.to_token_efficient_summary(raw_json, max_items=max_items)
-            except Exception:
-                parsed_tree = {"raw": exec_res.stdout}
+            except Exception as e:
+                parsed_tree = {"raw": exec_res.stdout, "error": str(e)}
 
         ocr_summary = None
         if include_ocr and not dry_run:
@@ -500,8 +502,8 @@ class WinTermAgent:
                         "text": ocr_data.get("Text", ""),
                         "words": ocr_data.get("Words", [])[:max_items],
                     }
-                except Exception:
-                    ocr_summary = {"raw": ocr_res.stdout}
+                except Exception as e:
+                    ocr_summary = {"raw": ocr_res.stdout, "error": str(e)}
 
         return {
             "window": window_identifier,
@@ -585,6 +587,97 @@ class WinTermAgent:
     def reject_swarm_suggestion(self, suggestion_id: str, reason: str = "") -> bool:
         """Rejects a sub-agent suggestion with an explanatory rationale."""
         return self.swarm.reject_suggestion(suggestion_id=suggestion_id, reason=reason)
+
+    # =========================================================================
+    # COGNITIVE SCREEN MENTAL MAP & PRECISION UI ACTIONS
+    # =========================================================================
+
+    def get_screen_mental_map(self, window_identifier: Optional[str] = None) -> Dict[str, Any]:
+        """Synthesizes physical desktop windows, active UIA controls, and WinRT OCR into a cognitive mental map."""
+        step_wins = DesktopGuiSubsystem.list_windows()
+        res_wins, _, _ = self.execute_step(step_wins)
+        windows = []
+        try:
+            windows = json.loads(res_wins.stdout) if res_wins.stdout else []
+        except Exception:
+            pass
+
+        target_hwnd = None
+        uia_elements = []
+        ocr_lines = []
+
+        if window_identifier:
+            try:
+                target_hwnd = int(window_identifier)
+            except ValueError:
+                for w in windows:
+                    if window_identifier.lower() in (w.get("Title") or "").lower():
+                        target_hwnd = w.get("Handle")
+                        break
+
+            step_uia = DesktopGuiSubsystem.inspect_ui_elements(window_identifier, max_items=100)
+            res_uia, _, _ = self.execute_step(step_uia)
+            try:
+                uia_elements = json.loads(res_uia.stdout) if res_uia.stdout else []
+            except Exception:
+                pass
+
+            step_ocr = DesktopGuiSubsystem.ocr_window(window_identifier)
+            res_ocr, _, _ = self.execute_step(step_ocr)
+            try:
+                ocr_data = json.loads(res_ocr.stdout) if res_ocr.stdout else {}
+                ocr_lines = ocr_data.get("Lines", [])
+            except Exception:
+                if res_ocr.stdout:
+                    ocr_lines = [l.strip() for l in res_ocr.stdout.splitlines() if l.strip()]
+
+        mental_map = ScreenMentalMap.build_from_perceptions(
+            windows=windows,
+            target_hwnd=target_hwnd,
+            uia_elements=uia_elements,
+            ocr_lines=ocr_lines,
+        )
+        return mental_map.to_dict()
+
+    def hover_element(
+        self,
+        window_identifier: str,
+        rel_x: Optional[int] = None,
+        rel_y: Optional[int] = None,
+        element_query: Optional[str] = None,
+        dwell_ms: int = 500,
+        control_type: Optional[str] = None,
+    ) -> Tuple[ExecutionResult, Optional[VerificationResult], DecisionTrace]:
+        """Hovers the cursor at a target UI element or coordinates to reveal dynamic menus or tooltips."""
+        step = DesktopGuiSubsystem.hover_element(
+            window_identifier,
+            rel_x=rel_x,
+            rel_y=rel_y,
+            element_query=element_query,
+            dwell_ms=dwell_ms,
+            control_type=control_type,
+        )
+        return self.execute_step(step)
+
+    def scroll_to_element(
+        self,
+        window_identifier: str,
+        target_rel_y: int,
+        viewport_center_y: int = 400,
+    ) -> Tuple[ExecutionResult, Optional[VerificationResult], DecisionTrace]:
+        """Calibrates and dispatches mouse wheel ticks to center a target element in the viewport."""
+        step = DesktopGuiSubsystem.scroll_into_view(window_identifier, target_rel_y, viewport_center_y=viewport_center_y)
+        return self.execute_step(step)
+
+    def type_with_clear(
+        self,
+        text: str,
+        delay_ms: int = 15,
+    ) -> Tuple[ExecutionResult, Optional[VerificationResult], DecisionTrace]:
+        """Clears existing field content (Ctrl+A + Backspace) and safely types new text using SendInput."""
+        step = DesktopGuiSubsystem.type_with_clear(text, delay_ms=delay_ms)
+        return self.execute_step(step)
+
 
 
 

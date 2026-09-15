@@ -18,6 +18,14 @@ app = typer.Typer(
     help="AI Agent Toolkit for Windows Terminal - Mastering What, How, When, Why, and What Happens After.",
     add_completion=False,
 )
+if sys.platform == "win32":
+    try:
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        if hasattr(sys.stderr, "reconfigure"):
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 console = Console()
 
 
@@ -773,6 +781,37 @@ def input_inspect(
         console.print(res.stdout, markup=False)
 
 
+@input_cli.command("hover")
+def input_hover(
+    x: int = typer.Argument(..., help="Target X coordinate (or window-relative X if --window is set)"),
+    y: int = typer.Argument(..., help="Target Y coordinate (or window-relative Y if --window is set)"),
+    window: Optional[str] = typer.Option(None, "--window", "-w", help="Optional target window title or HWND"),
+    dwell: int = typer.Option(500, "--dwell", "-d", help="Dwell time in milliseconds"),
+):
+    """Hovers mouse over target coordinates to reveal dynamic menus or tooltips."""
+    agent = WinTermAgent()
+    if window:
+        res, _, _ = agent.hover_element(window, x, y, dwell_ms=dwell)
+    else:
+        from winterm.interaction.mouse import MouseEngine
+        from winterm.engine.executor import WindowsShellExecutor
+        from winterm.models.context import ShellType
+        cmd = MouseEngine.build_hover_command(x, y, hwnd=None, dwell_ms=dwell)
+        res = WindowsShellExecutor().execute(cmd, target_shell=ShellType.POWERSHELL_51)
+    console.print(res.stdout or res.stderr, markup=False)
+
+
+@input_cli.command("type-clear")
+def input_type_clear(
+    text: str = typer.Argument(..., help="Text string to type after clearing existing content"),
+    delay: int = typer.Option(15, "--delay", "-d", help="Delay between keystrokes in ms"),
+):
+    """Clears existing field content via Ctrl+A and Backspace, then types replacement text."""
+    agent = WinTermAgent()
+    res, _, _ = agent.type_with_clear(text, delay_ms=delay)
+    console.print(res.stdout or res.stderr, markup=False)
+
+
 # =============================================================================
 # SCREEN PERCEPTION & CAPTURE CLI (STATE, CAPTURE)
 # =============================================================================
@@ -813,6 +852,297 @@ def screen_capture(
     console.print(f"[cyan]Capturing screen to '{escape(output)}'...[/cyan]")
     res, _, _ = agent.capture_screen(output, window_query=window)
     console.print(res.stdout or res.stderr, markup=False)
+
+
+# =============================================================================
+# UI AUTOMATION & ADVANCED PERCEPTION CLI (INSPECT, CLICK, SET-TEXT, SMART-CLICK, OCR, PERCEIVE, SOM, WAIT-CHANGE)
+# =============================================================================
+ui_cli = typer.Typer(help="UI Perception, Automation, OCR, and Smart Interaction.")
+app.add_typer(ui_cli, name="ui")
+
+
+@ui_cli.command("inspect")
+def ui_inspect(
+    window: str = typer.Argument(..., help="Window title, process name, or HWND to inspect"),
+    limit: int = typer.Option(50, "--limit", "-l", help="Max UI elements to return"),
+):
+    """Inspects UI Automation elements (buttons, edits, menus) in a window."""
+    agent = WinTermAgent()
+    res, _, _ = agent.inspect_window_elements(window, max_items=limit)
+    if res.exit_code != 0 or not res.stdout:
+        console.print(f"[red]Error inspecting UI elements: {escape(res.stderr)}[/red]")
+        return
+    try:
+        import json
+        data = json.loads(res.stdout)
+        elements = data.get("Elements", [])
+        table = Table(title=f"UI Elements in '{escape(str(data.get('WindowTitle')))}' ({len(elements)} items)", border_style="cyan")
+        table.add_column("Control Type", style="bold yellow")
+        table.add_column("Name", style="bold white")
+        table.add_column("AutomationId", style="green")
+        table.add_column("Center (X, Y)", style="cyan")
+
+        for el in elements:
+            cx = el.get("CenterX")
+            cy = el.get("CenterY")
+            center_str = f"({cx}, {cy})" if cx is not None and cy is not None else "-"
+            table.add_row(escape(el.get("ControlType", "")), escape(el.get("Name", "")), escape(el.get("AutomationId", "")), center_str)
+        console.print(table)
+    except Exception:
+        console.print(res.stdout, markup=False)
+
+
+@ui_cli.command("click")
+def ui_click(
+    window: str = typer.Argument(..., help="Window title or HWND"),
+    element: str = typer.Argument(..., help="Element name or AutomationId to click"),
+):
+    """Clicks a UI element using native UIAutomation InvokePattern."""
+    agent = WinTermAgent()
+    console.print(f"[cyan]Clicking UI element '{escape(element)}' in '{escape(window)}'...[/cyan]")
+    res, _, _ = agent.click_ui_element(window, element)
+    console.print(res.stdout or res.stderr, markup=False)
+
+
+@ui_cli.command("set-text")
+def ui_set_text(
+    window: str = typer.Argument(..., help="Window title or HWND"),
+    element: str = typer.Argument(..., help="Element name or AutomationId"),
+    text: str = typer.Argument(..., help="Text to set"),
+):
+    """Sets text inside an input or edit control using ValuePattern."""
+    agent = WinTermAgent()
+    console.print(f"[cyan]Setting text in '{escape(element)}' to '{escape(text)}'...[/cyan]")
+    res, _, _ = agent.set_ui_element_text(window, element, text)
+    console.print(res.stdout or res.stderr, markup=False)
+
+
+@ui_cli.command("smart-click")
+def ui_smart_click(
+    window: str = typer.Argument(..., help="Window title or HWND"),
+    element: str = typer.Argument(..., help="Target button or element text/query"),
+    control_type: Optional[str] = typer.Option(None, "--type", "-t", help="Optional UIAutomation control type filter"),
+):
+    """Multi-strategy cascading click: UIAutomation -> Native Windows OCR -> Coordinate click."""
+    agent = WinTermAgent()
+    console.print(f"[cyan]Smart-clicking '{escape(element)}' in window '{escape(window)}'...[/cyan]")
+    res, _, _ = agent.smart_click(window, element, control_type=control_type)
+    console.print(res.stdout or res.stderr, markup=False)
+
+
+@ui_cli.command("ocr")
+def ui_ocr(
+    window: str = typer.Argument(..., help="Window title or HWND"),
+    lang: str = typer.Option("en-US", "--lang", help="BCP-47 language tag"),
+):
+    """Executes native zero-dependency Windows OCR on the target window."""
+    agent = WinTermAgent()
+    res, _, _ = agent.ocr_window(window, language_tag=lang)
+    if res.exit_code != 0 or not res.stdout:
+        console.print(f"[red]OCR failed: {escape(res.stderr)}[/red]")
+        return
+    try:
+        import json
+        data = json.loads(res.stdout)
+        text = data.get("Text", "")
+        lines = data.get("Lines", [])
+        console.print(Panel(text or "[dim]No text detected[/dim]", title=f"OCR Detected Text ({len(lines)} lines)", border_style="green"))
+    except Exception:
+        console.print(res.stdout, markup=False)
+
+
+@ui_cli.command("perceive")
+def ui_perceive(
+    window: str = typer.Argument(..., help="Window title or HWND"),
+    limit: int = typer.Option(50, "--limit", "-l", help="Max UI elements"),
+    ocr: bool = typer.Option(True, "--ocr/--no-ocr", help="Include OCR textual detection"),
+):
+    """Generates a compact Markdown UI perception map and coordinate index."""
+    agent = WinTermAgent()
+    perception = agent.perceive_ui(window, max_items=limit, include_ocr=ocr)
+    md_tree = perception.get("ui_summary_markdown", "")
+    console.print(Panel(md_tree or "[dim]No UI elements[/dim]", title=f"UI Perception Map: {escape(window)}", border_style="cyan"))
+
+
+@ui_cli.command("som")
+def ui_som(
+    window: str = typer.Argument(..., help="Window title or HWND"),
+    output: str = typer.Argument(..., help="Output PNG file path for annotated screenshot"),
+    limit: int = typer.Option(50, "--limit", "-l", help="Max badge marks"),
+):
+    """Generates Set-of-Mark (SoM) visual grounding badges ([1], [2]...) on a window screenshot."""
+    agent = WinTermAgent()
+    console.print(f"[cyan]Generating SoM badges for '{escape(window)}' -> '{escape(output)}'...[/cyan]")
+    res, _, _ = agent.som_annotate(window, output, max_marks=limit)
+    console.print(res.stdout or res.stderr, markup=False)
+
+
+@ui_cli.command("wait-change")
+def ui_wait_change(
+    window: str = typer.Argument(..., help="Window title or HWND"),
+    timeout: int = typer.Option(3000, "--timeout", "-t", help="Timeout in milliseconds"),
+    min_diff: float = typer.Option(0.5, "--min-diff", "-m", help="Minimum pixel difference percentage"),
+):
+    """Waits asynchronously for visual UI change in the target window."""
+    agent = WinTermAgent()
+    console.print(f"[cyan]Waiting for visual UI change in '{escape(window)}' (Timeout={timeout}ms)...[/cyan]")
+    res, _, _ = agent.wait_for_ui_change(window, timeout_ms=timeout, min_diff_pct=min_diff)
+    console.print(res.stdout or res.stderr, markup=False)
+
+
+@ui_cli.command("mental-map")
+def ui_mental_map(
+    window: Optional[str] = typer.Argument(None, help="Optional window title or HWND"),
+    raw_json: bool = typer.Option(False, "--json", "-j", help="Output raw JSON structure"),
+):
+    """Synthesizes physical desktop windows, UIA controls, and WinRT OCR into a cognitive mental map."""
+    agent = WinTermAgent()
+    m_map = agent.get_screen_mental_map(window)
+    if raw_json:
+        import json
+        console.print_json(data=m_map)
+        return
+
+    win_info = m_map.get("spatial_layers", {}).get("layer_2_active_workspace", {})
+    win_title = win_info.get("title", "Active Desktop")
+    hwnd = win_info.get("handle", "N/A")
+    elements = m_map.get("elements", [])
+    attention = m_map.get("attention", {})
+
+    table = Table(title=f"Cognitive Screen Mental Map: {escape(str(win_title))} (HWND: {hwnd})", border_style="cyan")
+    table.add_column("Zone", style="bold yellow")
+    table.add_column("Role", style="magenta")
+    table.add_column("Text Content", style="white")
+    table.add_column("Center (X, Y)", style="green")
+    table.add_column("Source", style="dim cyan")
+
+    for el in elements[:25]:
+        table.add_row(
+            str(el["zone"]).upper(),
+            str(el["role"]).upper(),
+            escape(el["text"][:35]),
+            f"({el['center'][0]}, {el['center'][1]})",
+            str(el["source"]),
+        )
+    console.print(table)
+
+    affordances = attention.get("action_affordances", [])
+    if affordances:
+        aff_table = Table(title=f"Derived Action Affordances ({len(affordances)} opportunities)", border_style="green")
+        aff_table.add_column("Action", style="bold green")
+        aff_table.add_column("Target", style="bold white")
+        aff_table.add_column("Zone", style="yellow")
+        aff_table.add_column("Priority", style="cyan")
+        for aff in affordances[:8]:
+            aff_table.add_row(
+                aff["action"],
+                escape(str(aff.get("target_text") or aff.get("target_id") or "-")),
+                str(aff.get("zone", "")).upper(),
+                str(aff.get("priority", "NORMAL")),
+            )
+        console.print(aff_table)
+
+
+@ui_cli.command("scroll-to")
+def ui_scroll_to(
+    window: str = typer.Argument(..., help="Window title or HWND"),
+    target_y: int = typer.Argument(..., help="Target Y coordinate to center in viewport"),
+    center_y: int = typer.Option(400, "--center-y", "-c", help="Desired viewport center Y"),
+):
+    """Calibrates and dispatches mouse wheel ticks to center target element in viewport."""
+    agent = WinTermAgent()
+    res, _, _ = agent.scroll_to_element(window, target_y, viewport_center_y=center_y)
+    console.print(res.stdout or res.stderr, markup=False)
+
+
+# =============================================================================
+# UNIVERSAL TOOL RUNNER CLI (EXECUTE ANY OF THE 51 MCP TOOLS VIA TERMINAL/IO)
+# =============================================================================
+@app.command("tool")
+def tool_execute(
+    name: str = typer.Argument(..., help="Name of tool (e.g. winterm_ui_smart_click, winterm_input_type)"),
+    args: Optional[str] = typer.Argument(None, help="JSON string of arguments for the tool"),
+    raw: bool = typer.Option(False, "--raw", "-r", help="Output raw JSON without Rich styling"),
+):
+    """Executes any WinTerM tool directly from terminal CLI without writing scripts."""
+    import json
+    from winterm.tools.mcp_server import WinTermMCPServer
+
+    server = WinTermMCPServer()
+    if name not in server.tools:
+        console.print(f"[bold red]Unknown tool:[/bold red] '{name}'")
+        console.print(f"[yellow]Run 'winterm tools' to see all {len(server.tools)} available tools.[/yellow]")
+        raise typer.Exit(code=1)
+
+    parsed_args = {}
+    raw_input = args
+    if not raw_input and not sys.stdin.isatty():
+        try:
+            raw_input = sys.stdin.read().strip()
+        except Exception:
+            pass
+
+    if raw_input:
+        try:
+            parsed_args = json.loads(raw_input)
+        except Exception:
+            try:
+                import ast
+                parsed_args = ast.literal_eval(raw_input)
+            except Exception:
+                import re
+                # If passed as key=val or key1=val1 key2=val2
+                if "=" in raw_input and not raw_input.startswith("{"):
+                    for part in raw_input.split():
+                        if "=" in part:
+                            k, v = part.split("=", 1)
+                            parsed_args[k.strip()] = v.strip().strip("'\"")
+                else:
+                    # Normalize unquoted keys and unquoted word values
+                    fixed = re.sub(r'([{\s,])(\w+)\s*:', r'\1"\2":', raw_input)
+                    fixed = re.sub(r':\s*([a-zA-Z0-9_\-\.\*]+)\s*([,}])', r': "\1"\2', fixed)
+                    # Also normalize unquoted items in arrays [win, d] -> ["win", "d"]
+                    def _quote_array(match):
+                        items = [f'"{x.strip().strip(chr(34)).strip(chr(39))}"' for x in match.group(1).split(',') if x.strip()]
+                        return '[' + ', '.join(items) + ']'
+                    fixed = re.sub(r'\[([a-zA-Z0-9_\-\.\*,\s\'"]+)\]', _quote_array, fixed)
+                    fixed = fixed.replace("'", '"')
+                    try:
+                        parsed_args = json.loads(fixed)
+                    except Exception as e:
+                        console.print(f"[bold red]Invalid arguments:[/bold red] {raw_input} ({e})")
+                        raise typer.Exit(code=1)
+
+
+
+    tool_fn = server.tools[name]
+    try:
+        result = tool_fn(**parsed_args)
+        if raw or not sys.stdout.isatty():
+            print(json.dumps(result, indent=2, default=str))
+        else:
+            console.print_json(json.dumps(result, default=str))
+    except Exception as e:
+        console.print(f"[bold red]Tool execution error:[/bold red] {e}")
+        raise typer.Exit(code=1)
+
+
+@app.command("tools")
+def list_all_tools():
+    """Lists all 51 WinTerM tools available for AI agent terminal & MCP invocation."""
+    from winterm.tools.mcp_server import WinTermMCPServer
+    server = WinTermMCPServer()
+
+    table = Table(title=f"WinTerM Universal Agent Tools ({len(server.tools)} total)", border_style="cyan")
+    table.add_column("#", style="dim", justify="right")
+    table.add_column("Tool Name", style="bold green")
+    table.add_column("Summary / Capability", style="white")
+
+    for i, (name, fn) in enumerate(sorted(server.tools.items()), 1):
+        doc = (fn.__doc__ or "").strip().split("\n")[0]
+        table.add_row(str(i), name, doc)
+
+    console.print(table)
 
 
 # =============================================================================

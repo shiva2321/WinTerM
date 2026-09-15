@@ -15,6 +15,7 @@ from winterm.interaction.visual_grounding import SetOfMarkEngine
 from winterm.interaction.semantic_tree import SemanticAccessibilityTree
 from winterm.interaction.smart_resolver import SmartUIResolver
 from winterm.interaction.visual_diff import VisualStateVerifier
+from winterm.interaction.action_verifier import ActionVerifier
 
 
 class DesktopGuiSubsystem:
@@ -142,6 +143,111 @@ class DesktopGuiSubsystem:
             target_shell=ShellType.POWERSHELL_51,
             command=WindowManager.build_close_window_command(identifier),
             metadata={"subsystem": "desktop_gui", "action": "close_window", "identifier": identifier},
+        )
+
+    # =========================================================================
+    # 2b. PRECISION WINDOW FOCUS & INTERACTION (Use these, not raw focus+click)
+    # =========================================================================
+
+    @classmethod
+    def focus_and_verify(
+        cls,
+        identifier: str,
+    ) -> PlanStep:
+        """Brings a window to foreground with a verified retry loop.
+
+        Unlike focus_window, this confirms via GetForegroundWindow() after each
+        attempt that focus was actually granted. Returns FocusConfirmed bool,
+        AttemptsNeeded count, and ForegroundHwnd so the agent knows for certain
+        whether the target window has input focus before proceeding with clicks.
+        """
+        return PlanStep(
+            step_id=f"gui-focus-verify-{identifier}",
+            title=f"Focus Window (Verified) '{identifier}'",
+            category=ActionCategory.CUSTOM,
+            raw_intent=f"focus and verify window {identifier}",
+            target_shell=ShellType.POWERSHELL_51,
+            command=WindowManager.build_focus_command(identifier=identifier),
+            metadata={"subsystem": "desktop_gui", "action": "focus_and_verify", "identifier": identifier},
+        )
+
+    @classmethod
+    def click_in_window(
+        cls,
+        hwnd: str,
+        rel_x: int,
+        rel_y: int,
+        button: str = "left",
+        clicks: int = 1,
+    ) -> PlanStep:
+        """Click at window-relative coordinates (rel_x, rel_y) inside the target HWND.
+
+        This is the CORRECT way to click inside a specific window. It:
+        1. Computes absolute coordinates from the window's current screen position
+        2. Validates via WindowFromPoint that those coords belong to the target HWND
+        3. Aborts (ClickedInCorrectWindow=False) if another window is covering the target
+
+        Use this instead of mouse_click with global coordinates whenever you know the HWND.
+        """
+        return PlanStep(
+            step_id=f"gui-click-in-window-{hwnd}-{rel_x}-{rel_y}",
+            title=f"Click In Window HWND={hwnd} at ({rel_x}, {rel_y}) relative",
+            category=ActionCategory.CUSTOM,
+            raw_intent=f"click in window {hwnd} at {rel_x} {rel_y}",
+            target_shell=ShellType.POWERSHELL_51,
+            command=MouseEngine.build_click_in_window_command(
+                hwnd=hwnd, rel_x=rel_x, rel_y=rel_y, button=button, clicks=clicks
+            ),
+            metadata={
+                "subsystem": "desktop_gui",
+                "action": "click_in_window",
+                "hwnd": hwnd,
+                "rel_x": rel_x,
+                "rel_y": rel_y,
+                "button": button,
+            },
+        )
+
+    @classmethod
+    def capture_window_snapshot(
+        cls,
+        identifier: str,
+        output_path: str,
+    ) -> PlanStep:
+        """Captures a screenshot of only the target window (window-scoped, not full-screen).
+
+        Use this to get before/after snapshots for action_verifier.verify_action_effect.
+        """
+        return PlanStep(
+            step_id=f"gui-snapshot-{identifier}",
+            title=f"Capture Window Snapshot '{identifier}'",
+            category=ActionCategory.CUSTOM,
+            raw_intent=f"capture window snapshot {identifier}",
+            target_shell=ShellType.POWERSHELL_51,
+            command=ActionVerifier.build_capture_window_snapshot_command(identifier, output_path),
+            metadata={"subsystem": "desktop_gui", "action": "capture_snapshot", "identifier": identifier, "output": output_path},
+        )
+
+    @classmethod
+    def verify_action_effect(
+        cls,
+        before_path: str,
+        after_path: str,
+    ) -> PlanStep:
+        """Pixel-diffs two window snapshots to verify an action had a visible effect.
+
+        Returns Verdict ('Changed'/'Unchanged'), ChangePercent, ChangedRegion.
+        A ChangePercent >= 0.5% is considered a meaningful UI change.
+        Run capture_window_snapshot before and after the action to generate both snapshots.
+        """
+        return PlanStep(
+            step_id=f"gui-verify-action",
+            title="Verify Action Had Visible Effect (Pixel Diff)",
+            category=ActionCategory.CUSTOM,
+            raw_intent="verify action effect pixel diff",
+            target_shell=ShellType.POWERSHELL_51,
+            command=ActionVerifier.build_diff_snapshots_command(before_path, after_path),
+            metadata={"subsystem": "desktop_gui", "action": "verify_action_effect", "before": before_path, "after": after_path},
         )
 
     # =========================================================================
@@ -670,6 +776,68 @@ class DesktopGuiSubsystem:
         )
 
     @classmethod
+    def hover_element(
+        cls,
+        window_identifier: str,
+        rel_x: Optional[int] = None,
+        rel_y: Optional[int] = None,
+        element_query: Optional[str] = None,
+        dwell_ms: int = 500,
+        control_type: Optional[str] = None,
+    ) -> PlanStep:
+        """Hovers the cursor over a target UI element or coordinates in a window to reveal tooltips or hover menus."""
+        target_desc = f"query='{element_query}'" if element_query else f"({rel_x}, {rel_y})"
+        return PlanStep(
+            step_id=f"gui-hover-{window_identifier.replace(' ', '_')}",
+            title=f"Hover at {target_desc} in '{window_identifier}' (Dwell: {dwell_ms}ms)",
+            category=ActionCategory.CUSTOM,
+            raw_intent=f"hover at {target_desc} in {window_identifier}",
+            target_shell=ShellType.POWERSHELL_51,
+            command=SmartUIResolver.build_smart_hover_command(
+                window_identifier,
+                element_query=element_query,
+                rel_x=rel_x,
+                rel_y=rel_y,
+                dwell_ms=dwell_ms,
+                control_type=control_type,
+            ),
+            metadata={"subsystem": "desktop_gui", "action": "hover", "window": window_identifier, "query": element_query, "x": rel_x, "y": rel_y},
+        )
+
+    @classmethod
+    def scroll_into_view(
+        cls,
+        window_identifier: str,
+        target_rel_y: int,
+        viewport_center_y: int = 400,
+    ) -> PlanStep:
+        """Calibrates and dispatches mouse wheel ticks to center a target element in the viewport."""
+        return PlanStep(
+            step_id=f"gui-scroll-into-view-{window_identifier.replace(' ', '_')}",
+            title=f"Scroll Into View in '{window_identifier}' (TargetY: {target_rel_y})",
+            category=ActionCategory.CUSTOM,
+            raw_intent=f"scroll into view {target_rel_y} in {window_identifier}",
+            target_shell=ShellType.POWERSHELL_51,
+            command=f"$foundTitle = ''; $hWnd = [Win32WindowCore]::ResolveWindow('{window_identifier}', [ref]$foundTitle);\n" +
+                    f"if ($hWnd -ne [IntPtr]::Zero) {{ [Win32WindowCore]::ForceForegroundVerified($hWnd) | Out-Null }};\n" +
+                    MouseEngine.build_scroll_into_view_command(0, target_rel_y, viewport_center_y=viewport_center_y),
+            metadata={"subsystem": "desktop_gui", "action": "scroll_into_view", "window": window_identifier, "target_y": target_rel_y},
+        )
+
+    @classmethod
+    def type_with_clear(cls, text: str, delay_ms: int = 15) -> PlanStep:
+        """Clears existing field content (Ctrl+A + Backspace) and types replacement text safely."""
+        return PlanStep(
+            step_id="gui-type-with-clear",
+            title=f"Type with Clear '{text[:20]}...'",
+            category=ActionCategory.CUSTOM,
+            raw_intent=f"type with clear {text}",
+            target_shell=ShellType.POWERSHELL_51,
+            command=KeyboardEngine.build_type_with_clear_command(text, delay_ms=delay_ms),
+            metadata={"subsystem": "desktop_gui", "action": "type_with_clear", "length": len(text)},
+        )
+
+    @classmethod
     def plan_ocr_window(cls, window_identifier: str, language_tag: str = "en-US") -> List[PlanStep]:
         return [cls.ocr_window(window_identifier, language_tag=language_tag)]
 
@@ -684,3 +852,4 @@ class DesktopGuiSubsystem:
     @classmethod
     def plan_wait_for_ui_change(cls, window_identifier: str, timeout_ms: int = 3000, min_diff_pct: float = 0.5) -> List[PlanStep]:
         return [cls.wait_for_ui_change(window_identifier, timeout_ms=timeout_ms, min_diff_pct=min_diff_pct)]
+

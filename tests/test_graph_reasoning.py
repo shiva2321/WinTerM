@@ -465,12 +465,12 @@ def test_mcp_server_claude_and_opencode_protocol():
     assert res_resp["id"] == 3
     assert "resources" in res_resp["result"]
 
-    # 5. tools/list (all 51 tools with valid inputSchemas)
+    # 5. tools/list (all 54 tools with valid inputSchemas)
     tools_req = {"jsonrpc": "2.0", "id": 4, "method": "tools/list"}
     tools_resp = server.handle_request(tools_req)
     assert tools_resp["id"] == 4
     tools = tools_resp["result"]["tools"]
-    assert len(tools) == 51
+    assert len(tools) == 54
     assert all("name" in t and "inputSchema" in t for t in tools)
 
 

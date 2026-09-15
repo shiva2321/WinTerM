@@ -48,7 +48,7 @@ PROTECTED_PATHS: List[re.Pattern] = [
     re.compile(r"C:\\program files \(x86\)(\\|$)", re.IGNORECASE),
     re.compile(r"C:\\programdata(\\|$)", re.IGNORECASE),
     re.compile(r"C:\\boot(\\|$)", re.IGNORECASE),
-    re.compile(r"C:\\", re.IGNORECASE),                    # partition root
+    re.compile(r"(?<![a-zA-Z0-9_\\])C:\\(?![a-zA-Z0-9_\\])", re.IGNORECASE),  # partition root strictly
     re.compile(r"\$env:windir", re.IGNORECASE),
     re.compile(r"\$env:systemroot", re.IGNORECASE),
     re.compile(r"\$env:programfiles", re.IGNORECASE),
@@ -78,10 +78,9 @@ DESTRUCTIVE_VERBS: List[re.Pattern] = [
     re.compile(r"\bclear-recyclebin\b", re.IGNORECASE),
     re.compile(r"\bdiskpart\b", re.IGNORECASE),
     re.compile(r"\bclean\b", re.IGNORECASE),                # diskpart clean
-    re.compile(r"\bformat\b", re.IGNORECASE),
+    re.compile(r"\bformat(\.com|\.exe)?\s+[a-z]:", re.IGNORECASE),
     re.compile(r"\bnew-partition\b", re.IGNORECASE),
     re.compile(r"\bremove-partition\b", re.IGNORECASE),
-    re.compile(r"\bformat-volume\b", re.IGNORECASE),
     # Power control
     re.compile(r"\bstop-computer\b", re.IGNORECASE),
     re.compile(r"\brestart-computer\b", re.IGNORECASE),

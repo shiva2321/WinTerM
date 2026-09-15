@@ -10,14 +10,14 @@ WinTerM equips AI agents with deterministic Windows Terminal and Linux/WSL2 mast
 ---
 
 ## Tool Availability
-When executing actions, use the **51 MCP tools** provided by WinTerM (`python -m winterm.tools.mcp_server`):
+When executing actions, use the **54 MCP tools** provided by WinTerM (`python -m winterm.tools.mcp_server`):
 - **Core 5W Pipeline**: `plan_terminal_task`, `explain_terminal_command`, `predict_command_impact`, `execute_terminal_command`, `diagnose_terminal_error`, `undo_last_terminal_action`.
 - **Linux & WSL2 Subsystem**: `winterm_linux_execute`, `winterm_linux_path_convert`, `winterm_linux_distro_list`, `winterm_linux_safety_check`, `winterm_linux_diagnose_error`.
 - **Knowledge Graph**: `winterm_graph_blast_radius`, `winterm_graph_validate_command`, `winterm_graph_remedy_error`, `winterm_graph_alternatives`, `winterm_graph_command_docs`, `winterm_graph_safety_check`.
 - **Application Lifecycle**: `winterm_app_find`, `winterm_app_launch`, `winterm_app_close`, `winterm_app_learn`.
 - **Window Management**: `winterm_window_list`, `winterm_window_focus`, `winterm_window_resize`, `winterm_window_close`.
 - **UI Automation & Input**: `winterm_ui_inspect`, `winterm_ui_click`, `winterm_ui_set_text`, `winterm_input_type`, `winterm_input_hotkey`, `winterm_input_mouse_click`, `winterm_input_mouse_drag`, `winterm_screen_state`, `winterm_screen_capture`.
-- **Advanced UI Perception & Grounding**: `winterm_ui_perceive`, `winterm_ui_ocr`, `winterm_ui_som_annotate`, `winterm_ui_smart_click`, `winterm_ui_wait_change`.
+- **Advanced UI Perception & Mental Grounding**: `winterm_ui_perceive`, `winterm_ui_ocr`, `winterm_ui_som_annotate`, `winterm_ui_smart_click`, `winterm_ui_wait_change`, `winterm_screen_mental_map`, `winterm_ui_hover`, `winterm_ui_scroll_into_view`.
 - **Playbooks & Reusable Scripts**: `winterm_playbook_create`, `winterm_playbook_match_run`, `winterm_playbook_list`, `winterm_playbook_prune`.
 - **Multi-Agent Swarm Subsystem**: `winterm_swarm_dispatch`, `winterm_swarm_board_read`, `winterm_swarm_board_post`, `winterm_swarm_suggestions`, `winterm_swarm_status`.
 
@@ -32,15 +32,17 @@ When executing actions, use the **51 MCP tools** provided by WinTerM (`python -m
    - Inspect UI controls: `winterm_ui_inspect(window)`.
    - Query screen metrics: `winterm_screen_state()`.
 2. **DECIDE**:
-   - Class A (Win32/WPF/UWP): Use `AutomationId` or element names.
-   - Class B (Electron/Chromium): Use standard keyboard shortcuts (`Ctrl+P`, `Ctrl+Shift+P`).
+   - Class A (Win32/WPF/UWP): Use `AutomationId` or element names via `winterm_ui_inspect` / `winterm_ui_click`.
+   - Class B (Electron/Chromium): Use standard keyboard shortcuts (`Ctrl+P`, `Ctrl+Shift+P`), Set-of-Mark visual grounding (`winterm_ui_som_annotate`), or native OCR (`winterm_ui_ocr`).
    - Class C (Canvas/DirectX): Calculate relative offsets inside the target window's bounding box, never blind global screen coordinates.
 3. **ACT**:
-   - Focus the target window: `winterm_window_focus(window)`.
-   - Execute the action using generic toolkit tools (`winterm_ui_click`, `winterm_input_type`, etc.).
-   - **After the first SENSE step resolves a window, target it by the numeric `Handle` (HWND) for every later call in the same task, not by title.** Window titles can change dynamically (unsaved-changes markers, the document's own content appearing in the title bar), so a title that matched during SENSE can silently stop matching by the time ACT/VERIFY run. Every window/UI tool accepts a `Handle` wherever it accepts a title.
+   - Focus the target window: `winterm_window_focus(window)` — executes `ForceForegroundVerified` on a clean STA thread with `OpenInputDesktop`, returning verified focus confirmation (`FocusConfirmed: true`).
+   - Execute the action using generic toolkit tools (`winterm_ui_click`, `winterm_ui_smart_click`, `winterm_input_type`, etc.).
+   - All window clicks are window-contained (`ClickInWindow` with `WindowFromPoint` and `IsChild` hierarchy checks) to ensure clicks never misdeliver to overlapping windows.
+   - **After the first SENSE step resolves a window, target it by the numeric `Handle` (HWND) for every later call in the same task, not by title.** Window titles can change dynamically (unsaved-changes markers, document contents in the title bar), so a title that matched during SENSE can silently stop matching by the time ACT/VERIFY run. Every window/UI tool accepts a `Handle` wherever it accepts a title.
 4. **VERIFY**:
-   - Re-inspect UI tree or capture screenshot: `winterm_screen_capture()`.
+   - Re-inspect UI tree or capture window-scoped screenshot: `winterm_screen_capture()`.
+   - Perform perceptual visual diffing or OCR state confirmation (`winterm_ui_wait_change` or `ActionVerifier`).
    - If failed, diagnose with `diagnose_terminal_error` or query `winterm_graph_remedy_error`.
 
 ### Linux & WSL2:

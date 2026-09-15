@@ -445,6 +445,55 @@ def winterm_ui_wait_change(window_identifier: str, timeout_ms: int = 3000, min_d
     return {"exit_code": exec_res.exit_code, "output": exec_res.stdout, "error": exec_res.stderr}
 
 
+def winterm_screen_mental_map(window_identifier: Optional[str] = None, max_items: int = 60, include_ocr: bool = True) -> Dict[str, Any]:
+    """Generates a structured multi-layered cognitive mental map of the window or desktop.
+
+    Fuses UIAutomation and WinRT OCR into spatial layers (desktop, inactive, active workspace, modals)
+    and functional zones (header, navigation, content, sidebar, footer), infers semantic roles, and
+    derives next action affordances (CLICK, TYPE, SCROLL) to guide the agent's attention.
+    """
+    map_dict = _agent_instance.get_screen_mental_map(window_identifier)
+    return {"exit_code": 0, "mental_map": map_dict, "error": ""}
+
+
+def winterm_ui_hover(
+    window_identifier: str,
+    element_query: Optional[str] = None,
+    rel_x: Optional[int] = None,
+    rel_y: Optional[int] = None,
+    dwell_ms: int = 500,
+    control_type: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Hovers the mouse cursor over a target UI element or coordinates to trigger tooltips or menus.
+
+    Uses cubic Bezier smooth mouse interpolation and window-contained safety validation.
+    """
+    exec_res, _, _ = _agent_instance.hover_element(
+        window_identifier,
+        rel_x=rel_x,
+        rel_y=rel_y,
+        element_query=element_query,
+        dwell_ms=dwell_ms,
+        control_type=control_type,
+    )
+    return {"exit_code": exec_res.exit_code, "output": exec_res.stdout, "error": exec_res.stderr}
+
+
+def winterm_ui_scroll_into_view(
+    window_identifier: str,
+    target_rel_y: int,
+    viewport_center_y: int = 400,
+) -> Dict[str, Any]:
+    """Calibrates and dispatches mouse wheel ticks to bring an off-screen or off-center element into view."""
+    exec_res, _, _ = _agent_instance.scroll_to_element(
+        window_identifier,
+        target_rel_y=target_rel_y,
+        viewport_center_y=viewport_center_y,
+    )
+    return {"exit_code": exec_res.exit_code, "output": exec_res.stdout, "error": exec_res.stderr}
+
+
+
 def winterm_linux_execute(
     command: str,
     distro: Optional[str] = None,
@@ -1579,6 +1628,56 @@ EXPORTED_TOOLS_SCHEMA = [
                     "min_diff_pct": {"type": "number", "default": 0.5, "description": "Minimum percentage visual difference to consider changed."},
                 },
                 "required": ["window_identifier"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "winterm_screen_mental_map",
+            "description": "Constructs a multi-layered cognitive mental map of the screen/window with spatial layers, functional zones, and action affordances.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "window_identifier": {"type": "string", "description": "Optional window title substring or HWND. If omitted, maps all desktop windows."},
+                    "max_items": {"type": "integer", "default": 60, "description": "Maximum number of semantic elements to retain."},
+                    "include_ocr": {"type": "boolean", "default": True, "description": "Whether to include native Windows OCR text recognition."},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "winterm_ui_hover",
+            "description": "Hovers mouse cursor smoothly over a UI element or coordinates to reveal tooltips or hover menus.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "window_identifier": {"type": "string", "description": "Window title substring or numeric window handle (HWND)."},
+                    "element_query": {"type": "string", "description": "Name, label, text, or AutomationId of element to hover."},
+                    "rel_x": {"type": "integer", "description": "Optional relative X coordinate inside window."},
+                    "rel_y": {"type": "integer", "description": "Optional relative Y coordinate inside window."},
+                    "dwell_ms": {"type": "integer", "default": 500, "description": "Hover dwell duration in milliseconds."},
+                    "control_type": {"type": "string", "description": "Optional ControlType constraint."},
+                },
+                "required": ["window_identifier"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "winterm_ui_scroll_into_view",
+            "description": "Calibrates and dispatches mouse wheel ticks to bring an off-screen or off-center element into view.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "window_identifier": {"type": "string", "description": "Window title substring or numeric window handle (HWND)."},
+                    "target_rel_y": {"type": "integer", "description": "Relative Y coordinate of target element in window space."},
+                    "viewport_center_y": {"type": "integer", "default": 400, "description": "Desired viewport center Y coordinate."},
+                },
+                "required": ["window_identifier", "target_rel_y"],
             },
         },
     },

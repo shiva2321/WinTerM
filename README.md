@@ -1,615 +1,201 @@
-# WinTerM: The AI Agent Toolkit for Windows Terminal & Desktop
+# WinTerM: The AI Agent Operating System for Windows & Linux/WSL
 
 [![GitHub Repo](https://img.shields.io/badge/GitHub-shiva2321%2FWinTerM-181717?logo=github)](https://github.com/shiva2321/WinTerM)
 [![Windows](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011%20%7C%20Server-0078D6?logo=windows)](https://microsoft.com)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python)](https://python.org)
-[![Tests](https://img.shields.io/badge/Tests-166%2F166%20Passing-brightgreen?logo=pytest)](https://github.com/shiva2321/WinTerM/actions)
-[![License](https://img.shields.io/badge/License-Source--Available%20%7C%20Commercial%20Permission%20Required-red.svg)](LICENSE)
-[![Model Context Protocol](https://img.shields.io/badge/MCP-51%20Tools%20%2B%20Prompts-FF6B6B)](https://modelcontextprotocol.io)
+[![Tests](https://img.shields.io/badge/Tests-182%2F182%20Passing-brightgreen?logo=pytest)](docs/PROOFS_AND_BENCHMARKS.md)
+[![Model Context Protocol](https://img.shields.io/badge/MCP-54%20Tools%20%2B%20Prompts-FF6B6B)](docs/MCP_TOOLS.md)
 [![Gemini Ready](https://img.shields.io/badge/Gemini-Native%20Support-8E75B2?logo=google)](GEMINI.md)
+[![Claude Code](https://img.shields.io/badge/Claude%20Code-Verified-D97757?logo=anthropic)](CLAUDE.md)
 [![DeepSeek Ready](https://img.shields.io/badge/DeepSeek-R1%20CoT%20Aligned-007AFF?logo=deepseek)](DEEPSEEK.md)
-[![Linux & WSL2](https://img.shields.io/badge/Linux%20%26%20WSL2-Deterministic%20Safety-FCC624?logo=linux&logoColor=black)](winterm/subsystems/linux_subsystem.py)
-[![PRs Welcome](https://img.shields.io/badge/PRs-Welcome-brightgreen.svg)](CONTRIBUTING.md)
-[![Roadmap](https://img.shields.io/badge/Roadmap-Public-blueviolet)](ROADMAP.md)
+[![Linux & WSL2](https://img.shields.io/badge/Linux%20%26%20WSL2-Dual--Stack%20Safety-FCC624?logo=linux&logoColor=black)](winterm/subsystems/linux_subsystem.py)
+[![License](https://img.shields.io/badge/License-Source--Available%20%7C%20Commercial%20Permission%20Required-red.svg)](LICENSE)
 
-**WinTerM** is the foundational AI Agent Toolkit purpose-built for the Windows operating system and Linux/WSL2 environments. It equips autonomous agents with deep terminal mastery, reliable execution mechanics, interactive desktop GUI automation, multi-agent concurrency coordination, and an epistemological **5W Cognitive Model**:
-- **WHAT to do**: Natural language intent decomposition into staged Directed Acyclic Graph (DAG) plans.
-- **HOW to do**: Production-grade Windows Shell reliability (PowerShell 5.1/7+, CMD, Win32) and Linux/WSL2 Bash execution, quoting, escaping, call operator `&`, UTF-8 byte preservation, elevation handling, and non-interactive guards.
-- **WHEN to do**: System state guards, precondition verification, dependency topological sorting, and idempotency checks (skipping already-satisfied states).
-- **WHY to do**: Transparent semantic rationale explaining command selection, switch choices, Windows quirk mitigations, and why alternatives were rejected.
-- **WHAT WILL HAPPEN AFTER (and How & Why)**: Pre-execution predictive state diff simulation (files, registry, services, processes, ports), safety risk tiering, automated rollback synthesis, post-condition verification, and autonomous error self-healing.
+**WinTerM equips autonomous AI agents with Eyes, Hands, and Terminal Mastery on Windows and Linux/WSL2.**
+
+Most AI agents struggle on Windows because they operate as blind shell wrappers — they crash on PowerShell quoting quirks, freeze on interactive prompts, cannot see graphical applications, and cannot click or type without breaking modern Windows apps.
+
+**WinTerM fundamentally solves this.** It gives any AI model (Claude, Gemini, DeepSeek, GPT-4, Llama) deterministic control over the entire operating system: executing terminal commands safely, launching desktop software, clicking buttons, typing text, and extracting everything visible on screen with zero third-party dependencies.
 
 ---
 
-## Why WinTerM? (The Paradigm Shift)
+## 📸 Real-World Proofs & Live Telemetry
 
-Most AI agents running on Windows fail because they rely on fragile shell wrappers or blind pixel-based GUI automation tools. WinTerM fundamentally solves this:
+WinTerM is tested and verified directly on live Windows 11 environments with zero external browser drivers, web wrappers, or third-party OCR libraries.
 
-| Capability | Raw PowerShell / CMD | PyAutoGUI / pywin32 | Generic Bash Wrappers | **WinTerM** |
-|:---|:---:|:---:|:---:|:---:|
-| **5W Cognitive Pipeline** (What, How, When, Why, After) | ❌ None | ❌ None | ❌ None | ✅ **Built-in Epistemological Model** |
-| **Windows Shell Reliability** (Quoting, `&`, UTF-8, non-interactive) | ❌ Frequent crashes & hangs | ❌ N/A | ❌ Broken path & syntax | ✅ **Strict Automated Synthesis** |
-| **Linux & WSL2 Subsystem** | ❌ None | ❌ None | ⚠️ Fragile & unconstrained | ✅ **Deterministic Safety & Self-Healing** |
-| **Interactive Desktop GUI Control** | ❌ Terminal only | ⚠️ Blind pixel coordinate guesses | ❌ Headless only | ✅ **Native UI Automation Trees + Bounds** |
-| **Visual Perception & Grounding** | ❌ None | ⚠️ Blind pixel coordinate guesses | ❌ Headless only | ✅ **Hardware WinRT OCR + Set-of-Mark (SoM) + Pruned Semantic Tree** |
-| **Input Queue Safety** | ❌ None | ⚠️ Freezes cursor/queue on crash | ❌ None | ✅ **Guaranteed `try...finally` Release** |
-| **Autonomous Error Self-Healing** | ❌ Manual debugging required | ❌ None | ❌ None | ✅ **100+ HRESULT, Win32 & POSIX Catalog** |
-| **Knowledge Graph & Hallucination Defense** | ❌ Frequent flag hallucinations | ❌ None | ❌ None | ✅ **10,374-Node Graph with 3 Datasets** |
-| **Multi-Agent Coexistence Coordinator** | ❌ Session stomping & collisions | ❌ None | ❌ None | ✅ **Resource Locks & Shared Ledgers** |
-| **Script Justification & Reusable Playbooks** | ❌ Unchecked script bloat | ❌ None | ❌ None | ✅ **Strict Anti-Waste Gate + Parameter Playbooks** |
-| **Multi-Agent Swarm & Layered Safety** | ❌ Uncontrolled child processes | ❌ None | ❌ None | ✅ **Scoped Privileges, Blackboard Board & Circuit Breaker** |
-| **Model Context Protocol (MCP)** | ❌ None | ❌ None | ❌ None | ✅ **51 Production Tools + System Prompts** |
+### Proof 1: Autonomous Chrome Search & Screen Perception
+WinTerM opened Google Chrome via OS keyboard simulation (`Win+R`), latched onto the window (`HWND 789800`), activated the search bar (`Ctrl+L`), submitted the query `"quantum computing breakthroughs 2026"`, smoothly scrolled through the viewport, and parsed 65 lines of search results using **WinRT Native OCR**:
 
----
+![Google Chrome Autonomous Search Recording](docs/assets/chrome_autonomous_search.webp)
 
-## Universal Agent Ecosystem Compatibility
-
-WinTerM connects out of the box with any AI agent framework:
-- 🤖 **Claude Code**: 1-command setup via `claude mcp add winterm python -m winterm.tools.mcp_server` (native [`CLAUDE.md`](CLAUDE.md) and custom skills in [`.claude/skills/winterm/`](.claude/skills/winterm/)).
-- 🧩 **OpenCode**: Native [`opencode.json`](opencode.json) and [`OPENCODE.md`](OPENCODE.md) integration for local open-source agent execution.
-- ⚡ **Google Gemini & Antigravity**: Native [`GEMINI.md`](GEMINI.md) operating manual with multimodal visual perception grounding (`winterm_screen_capture`).
-- 🧠 **DeepSeek (V3 & R1)**: Native [`DEEPSEEK.md`](DEEPSEEK.md) integration aligning R1 `<think>` reasoning tokens with the 5W cognitive pipeline.
-- 💻 **Cursor & Windsurf**: Terminal command synthesis and safe background desktop execution.
-- 🌐 **LangChain, CrewAI & AutoGen**: Python SDK tool wrappers for multi-agent swarms.
-- 🤝 **Simultaneous Multi-Agent Coexistence**: Cooperative resource locking and shared session coordination via `AgentSessionCoordinator`.
-
-
----
-
-## The 5W Cognitive Model Architecture
-
-```
-                    ┌────────────────────────────┐
-                    │     User Natural Goal      │
-                    └─────────────┬──────────────┘
-                                  │
-      ┌───────────────────────────┴───────────────────────────┐
-      │               THE 5W COGNITIVE PIPELINE               │
-      ├───────────────────────────────────────────────────────┤
-      │ 1. WHAT TO DO       TerminalPlanner                   │
-      │    Decomposes goal into atomic PlanSteps (DAG)        │
-      │                                                       │
-      │ 2. HOW TO DO        CommandSynthesizer                │
-      │    Enforces quoting, call op &, UTF-8, non-interact   │
-      │                                                       │
-      │ 3. WHEN TO DO       PreconditionScheduler             │
-      │    Evaluates state guards & checks idempotency        │
-      │                                                       │
-      │ 4. WHY TO DO        SemanticReasoner                  │
-      │    Transparent rationale & alternatives rejected      │
-      │                                                       │
-      │ 5. AFTER & BEYOND   ImpactPredictor & StateVerifier   │
-      │    State diff simulation, risk score, undo & heal     │
-      └───────────────────────────┬───────────────────────────┘
-                                  │
-                    ┌─────────────┴──────────────┐
-                    │    WindowsShellExecutor    │
-                    │ PowerShell 5.1 / 7+ / CMD  │
-                    └────────────────────────────┘
+```text
+Extracted Directly via WinTerM Native OCR:
+• AI Overview: "Quantum computing uses the laws of quantum physics to solve complex problems..."
+• Qubits: "Normal computers use bits that are either 0 or 1. Quantum computers use qubits..."
+• Wikipedia Card: "Quantum computing - Wikipedia - https://en.wikipedia.org > wiki > Quantum_computing"
+• People Also Ask: "What is quantum computing in simple words?", "What does quantum computing really do?"
+• IBM Card: "What Is Quantum Computing? | IBM"
 ```
 
----
+![Chrome Set-of-Mark Grounding](docs/assets/chrome_som_overlay.png)
 
-## The 10-Layer Subsystem Architecture
+### Proof 2: Autonomous Text Typing in Modern WinUI3 Notepad
+Legacy automation tools crash the modern Windows 11 Notepad because of unsupported `keybd_event` unicode flags. WinTerM uses hardware-accurate Win32 `SendInput` on a verified desktop thread with automatic clearing and Set-of-Mark feedback:
 
-WinTerM covers the complete hierarchy of Windows Terminal operations and desktop interaction:
+![Notepad Autonomous Typing Recording](docs/assets/notepad_autonomous_typing.webp)
 
-| Layer | Subsystem Class | Description & Primitives |
-|:---|:---|:---|
-| **Layer 0: Kernel & Boot** | `KernelBootSubsystem` | BCD store (`bcdedit`), ACPI power schemes (`powercfg`), device drivers (`pnputil`), hardware TPM chip (`Get-Tpm`), UEFI/BIOS firmware boot mode. |
-| **Layer 1: Storage & NTFS** | `StorageNTFSSubsystem` | Physical disks (`Get-Disk`), partitions, volumes (`Get-Volume`), BitLocker encryption, VSS shadow copies (`vssadmin`), junctions, symlinks, and ACL permissions (`icacls`, `Get-Acl`, `takeown`). |
-| **Layer 2: Process & Memory** | `ProcessMemorySubsystem` | Process lifecycle, priority classes (`PriorityClass`), CPU affinity bitmasks (`ProcessorAffinity`), loaded DLL modules (`$proc.Modules`), threads, and memory working set trimming. |
-| **Layer 3: Services & Tasks** | `ServicesTasksSubsystem` | Windows SCM (`Get-Service`), auto-restart failure recovery (`sc.exe failure`), startup types, Task Scheduler (`schtasks /create`, `Get-ScheduledTask`), background jobs. |
-| **Layer 4: Registry & Policies** | `RegistryPolicySubsystem` | All registry hives (`HKLM`, `HKCU`, `HKCR`, `HKU`), typed values (`DWord`, `QWord`, `String`), and Group Policy synchronization (`gpupdate /force`, `gpresult /r`). |
-| **Layer 5: Security & Crypto** | `SecurityCryptoSubsystem` | User token privileges (`whoami /priv`), local accounts (`Get-LocalUser`), Windows Certificate Store (`Cert:\LocalMachine\My`), Windows Defender protection & exclusions, Credential Manager (`cmdkey`). |
-| **Layer 6: Network & Firewall** | `NetworkFirewallSubsystem` | Network adapters (`Get-NetAdapter`), IPv4 routing table (`Get-NetRoute`), Windows Defender Firewall rules (`New-NetFirewallRule`), DNS cache flushing, WinHTTP system proxy (`netsh winhttp`). |
-| **Layer 7: Diagnostics & Health** | `DiagnosticsHealthSubsystem` | Windows Event Log (`Get-WinEvent`), real-time performance counters (`Get-Counter`), System File Checker (`sfc /scannow`), and DISM servicing (`dism /CheckHealth`). |
-| **Layer 8: Virtualization & Packages** | `VirtualizationPackagesSubsystem` | WSL distributions lifecycle (`wsl.exe -l -v`), Hyper-V virtual machines (`Get-VM`), Windows Optional Features, and package managers (`winget`, `choco`, `scoop`). |
-| **Layer 9: Desktop GUI & Interaction** | `DesktopGuiSubsystem` | Universal application discovery (`shell:AppsFolder`, Start Menu, Registry), window management (`EnumDesktopWindows`, `ForceForeground`), UI Automation (`InvokePattern`, `ValuePattern`), and keyboard/mouse/pen input automation. |
-| **Layer 10: Linux & WSL2** | `LinuxSubsystem` | Full Linux POSIX compatibility, systemctl daemon control, process/storage/network inspection, non-interactive package management (`apt`/`dnf`/`apk`/`pacman`), and bidirectional path translation (`wslpath`). |
+### Proof 3: Cognitive Screen Mental Map & Dynamic Attention
+WinTerM maintains an internal 5-layer spatial hierarchy (`Desktop`, `Inactive Windows`, `Active Workspace`, `Modals & Dialogs`, `Functional Zones`) and scores real-time Action Affordances so AI models have continuous cognitive focus:
 
+![Screen Mental Map Architecture](docs/assets/screen_mental_map.png)
+
+*(For full execution logs, benchmarks, and data, see the [Proofs & Benchmarks Document](docs/PROOFS_AND_BENCHMARKS.md)).*
 
 ---
 
-## Windows Shell Reliability Standards
+## ⚡ Key Capabilities at a Glance
 
-WinTerM inherently enforces the golden reliability rules of Windows terminal execution:
-1. **Space Quoting & Call Operator (`&`)**:
-   - In PowerShell, any path with whitespace is quoted: `& "C:\Program Files\App\bin.exe"`.
-2. **Logical Operator Parentheses**:
-   - Fixes the common PowerShell trap `if (Test-Path a -or Test-Path b)` -> automatically synthesized as `if ((Test-Path a) -or (Test-Path b))`.
-3. **UTF-8 Byte Stream Integrity**:
-   - Resolves older Windows PowerShell 5.1 redirection byte corruption with UTF-8 preambles and explicit output encoders.
-4. **Interactive Hang Mitigation**:
-   - Injects `-Confirm:$false`, `-Force`, `--accept-source-agreements`, `/Y`, and `--yes` to prevent headless agent sessions from hanging on stdin.
-5. **ASCII Console Enforcement**:
-   - Translates unicode emojis into ASCII tokens (`[OK]`, `[X]`, `[WARN]`) to prevent crash/corruption across legacy OEM code pages.
-6. **Win32 Long Path Support**:
-   - Supports extended length prefix `\\?\` for paths exceeding the 260-character MAX_PATH threshold.
-7. **Autonomous Error Diagnosis & Self-Healing**:
-   - Translates Windows HRESULTs and exit codes (`0x80070005 Access Denied`, `0x80070020 Sharing Violation`, `PSSecurityException ExecutionPolicy`, `10048 Port in use`) into actionable remediation commands.
+| Pillar | What WinTerM Gives the Agent | Why It Matters |
+| :--- | :--- | :--- |
+| **👀 The Eyes** *(Perception)* | • **Cognitive Screen Mental Map**: Persistent 5-layer spatial model (`Desktop`, `Inactive Windows`, `Active Workspace`, `Modals`, `Functional Zones`) with prioritized Action Affordances.<br>• **WinRT Native OCR**: Extracts text from any window with zero Python/C++ dependencies.<br>• **Set-of-Mark (SoM)**: Overlays high-contrast numbered badges (`[1]`, `[2]`, `[3]`) for vision models.<br>• **UIAutomation Tree**: Deep semantic inspection of buttons, edit boxes, and menus.<br>• **Visual Change Detection**: Waits for page loads and transitions without brittle sleeps. | The agent understands what is on screen across spatial layers and functional zones, with clear attention on what to do next. |
+| **✋ The Hands** *(Action)* | • **Natural Mouse Movement**: Smooth cubic Bezier curves with randomized control point offsets to prevent bot detection.<br>• **Element Hovering**: Dwells over buttons, toolbars, or coordinates to trigger dynamic hover menus and preview cards.<br>• **Calibrated Viewport Scrolling**: Centers off-screen elements cleanly into view via calculated wheel ticks.<br>• **Focus-Verified Typing with Auto-Clear**: Synchronized `Ctrl+A` + `Backspace` before safe Unicode typing.<br>• **Verified Window Focus & Window-Contained Clicks**: Locks foreground desktop and validates `WindowFromPoint` containment. | The agent interacts with apps just like a human operator, with fluid natural motion and zero misclicks or corrupted inputs. |
+| **💻 Terminal Mastery** *(Shell)* | • **PowerShell 5.1/7 & CMD**: Automatic quoting, call operator `&`, execution policy handling.<br>• **Linux & WSL2 Dual-Stack**: Automatic bidirectional path translation (`C:\...` $\leftrightarrow$ `/mnt/c/...`).<br>• **Non-Interactive Guards**: Injects `-Force` and `-Confirm:$false` to prevent headless agent hangs.<br>• **Deterministic Safety Gate**: Blocks dangerous commands (`rm -rf /`, `diskpart`, `Format-Volume`) by default. | The agent never hangs waiting for user input and cannot accidentally destroy system files. |
+| **🧠 Cognitive Brain** *(5W Pipeline)* | • **WHAT**: Decomposes natural language goals into staged execution steps.<br>• **HOW**: Strict command synthesis for the specific active shell.<br>• **WHEN**: State guards and idempotency checks (skips already-satisfied states).<br>• **WHY**: Semantic explanation of why switches were chosen and alternatives rejected.<br>• **AFTER**: Pre-execution blast radius simulation, state diffing, rollback undo, and error healing. | The agent understands *why* it is running a command, *what* will change, and *how* to undo or self-heal errors. |
+| **🐝 Multi-Agent Swarm** *(Coordination)* | • **Shared Message Board**: Agents post directives and progress updates to an async blackboard.<br>• **Scoped Privileges**: Restricts sub-agents (`READ_ONLY_AUDIT`, `UI_OPERATOR`, `TERMINAL_EXECUTOR`).<br>• **Fluke Containment**: Isolated circuit breakers ensure one sub-agent's error never crashes the main agent. | Multiple AI models (Gemini, Claude, DeepSeek) can work together on the same PC without fighting over windows. |
 
 ---
 
-## Installation & Setup
+## 🚀 3-Minute Quick Start
 
+### 1. Installation
+Clone the repository and install in editable mode:
 ```powershell
-# Clone or navigate to the repository
-cd d:\Agent_toolkit
-
-# Install in editable mode
-python -m pip install -e .
+git clone https://github.com/shiva2321/WinTerM.git
+cd WinTerM
+pip install -e .
 ```
 
----
+### 2. Connect to Your AI Agent (Model Context Protocol)
+WinTerM exposes **54 production tools** via standard MCP. Add this to your agent configuration:
 
-## Command Line Interface (`winterm`)
-
-WinTerM includes a rich interactive CLI:
-
-### 1. Inspect System Environment & Shell Matrix
-```powershell
-winterm info
-winterm subsystems
-```
-Displays OS version, PowerShell version, active console code page, LongPathsEnabled status, detected package managers, and the full 9-layer subsystem capabilities.
-
-### 2. Plan a Task (The WHAT)
-```powershell
-winterm plan "Find what process is using port 8080 and stop it"
-```
-
-### 3. Deep 5W Breakdown (The WHY, HOW, WHEN, AFTER)
-```powershell
-winterm explain "Stop-Process -Id 1234 -Force"
-```
-
-### 4. Execute with Dry-Run or Full Auto-Healing
-```powershell
-# Dry-run simulation (predicts impact without modifying system state)
-winterm run "Query top 5 memory processes" --dry-run
-
-# Live execution with automated self-healing
-winterm run "Query system hardware info"
-```
-
-#### Safety Gate (Protects Against Destructive Commands)
-Every execution is protected by a deterministic **SafetyGate** (see `winterm/knowledge/safety_guard.py`). Commands classified as `HIGH_DESTRUCTIVE` — e.g. `Remove-Item` on protected system paths, `Stop-Computer`, `Format-Volume`, `diskpart`, registry deletion — are **refused by default**:
-
-```powershell
-# Refused (exit code -100) — no confirmation supplied
-winterm run "Remove-Item -Recurse -Force C:\Windows\System32"
-# [X] Failed with exit code -100
-# [SAFETY GATE] Refused to execute: ...
-
-# Explicitly allow high-risk commands (DANGEROUS — use with extreme care)
-winterm run "Remove-Item -Recurse -Force C:\Windows\System32" --confirm-high-risk
-```
-
-Read-only queries (`Get-*`, `Select-*`, `Test-*`, `netstat`, `ipconfig`, ...) always pass through the gate normally.
-
-### 5. Diagnose Windows Terminal Errors
-```powershell
-winterm diagnose "0x80070005: Access is denied."
-```
-
-### 6. Windows Terminal Knowledge Graph Reasoning
-```powershell
-# Graph topology and ontological entity breakdown (10,374 nodes, 5,675 edges)
-winterm graph info
-
-# Cascading blast radius analysis (direct + transitive dependent services)
-winterm graph blast-radius RpcSs --depth 2
-
-# Parameter hallucination validation (flags & typo suggestions)
-winterm graph validate "Get-Process -Name svchost -Id 1234"
-winterm graph validate "bcdedit.exe /enum /v"
-
-# Natural language intent search across 25,000+ indexed mappings (sumit-s-nair/command-dataset)
-winterm graph search-intent "find files modified today"
-
-# Official Microsoft command syntax & parameter docs (IAmSomeone/Windows_command)
-winterm graph docs arp
-winterm graph docs robocopy
-
-# SFT safety & credential sensitivity classification (mshojaei77/terminal-command-execution-sft)
-winterm graph safety "Format-Volume -DriveLetter D"
-winterm graph safety "Get-Process"
-
-# Destructive commands are now deterministically flagged (SafetyGuard)
-winterm graph safety "Remove-Item -Recurse -Force C:\Windows\System32"
-# Safety Classification: DESTRUCTIVE / Dangerous / High Risk: True
-winterm graph safety "Stop-Computer -Force"
-# Safety Classification: DESTRUCTIVE / Dangerous / High Risk: True
-
-# Multi-step error remediation paths
-winterm graph remedy 0x80070005
-winterm graph remedy 10048
-
-# Cross-shell command alternatives (cmdlet <-> native Win32)
-winterm graph alternatives Stop-Process
-```
-
----
-
-## Windows Terminal Knowledge Graph & Hugging Face Datasets
-
-WinTerM incorporates an ontological, graph-theoretic knowledge engine (`networkx.MultiDiGraph`) with **10,374 nodes** and **5,675 directed semantic edges**, deeply integrating three high-quality terminal datasets:
-
-1. **`mshojaei77/terminal-command-execution-sft`**:
-   - Classifies commands into safety tiers (`safe`, `destructive`, `credential_sensitive`, `privileged`), operational skills, and actionable risk warnings.
-2. **`IAmSomeone/Windows_command`**:
-   - Official Microsoft syntax definitions, compatibility versions (`Windows Server 2022`, `Windows 11`), and full switch dictionaries for 144+ Windows binaries.
-3. **`sumit-s-nair/command-dataset`**:
-   - Natural language intent-to-command mappings spanning PowerShell and CMD, indexed into intent nodes with word-level relevance grounding.
-
-### Ontological Entities (Nodes)
-- `COMMAND` (199): Factual PowerShell cmdlets and Win32 binaries across all 9 architectural layers.
-- `PARAMETER` (4,738): Real parameters, switches, and flags with descriptions.
-- `INTENT` (5,000): Natural language goal queries mapped to concrete commands.
-- `SAFETY_RULE` (355): Safety policies, privilege warnings, and credential risk rules.
-- `SERVICE_RESOURCE` (30): Factual Windows SCM services with dependency trees.
-- `STATE_ENTITY` (29): System state primitives (TCP ports, DACLs, registry keys, volumes).
-- `ERROR_CODE` (10): Real HRESULTs (`0x80070005`, `0x80070422`, `0x800706BA`), Win32 codes (`5`, `10048`), and exceptions.
-- `PRIVILEGE` (4): Security token requirements (`StandardUser`, `Administrator`, `SYSTEM`).
-- `SUBSYSTEM` (9): The 9 architectural subsystem layers.
-
-### Directional Relationships (Edges)
-- `HAS_PARAMETER` (4,738), `MAPS_TO_COMMAND` (313), `PART_OF_SUBSYSTEM` (230), `REQUIRES_PRIVILEGE` (209), `DEPENDS_ON` (47), `DEPENDENCY_OF` (47), `MUTATES_STATE` (37), `ALTERNATIVE_TO` (22), `REMEDIATES_ERROR` (17), `HAS_SAFETY_RULE` (15).
-
----
-
-## Python SDK Integration
-
-```python
-from winterm.agent.winterm_agent import WinTermAgent
-
-agent = WinTermAgent()
-
-# 1. Plan a multi-step goal
-plan = agent.plan("Find process on port 3000 and terminate it")
-
-# 2. Inspect the 5W Decision Trace for a step
-trace = agent.explain(plan.steps[0])
-print(trace.what)
-print(trace.why.command_justification)
-print(trace.after)
-
-# 3. Knowledge Graph: Intent search, docs & safety
-intents = agent.search_intent("find all text files")
-docs = agent.get_command_docs("arp")
-safety = agent.check_command_safety("Format-Volume -DriveLetter D")
-
-# 4. Knowledge Graph: Blast radius & parameter validation
-blast = agent.calculate_blast_radius("RpcSs", depth=2)
-print(f"Blast risk: {blast.risk_score}, Direct dependents: {len(blast.direct_dependents)}")
-
-val = agent.validate_command("Get-Process -Name svchost -Id 1234")
-print(f"Valid command: {val.is_valid}")
-
-# 5. Execute step with verification
-exec_res, verif_res, trace = agent.execute_step(plan.steps[0], dry_run=False)
-if exec_res.success:
-    print(f"Success! Output: {exec_res.stdout}")
-
-# 6. Undo / Rollback
-undo_res = agent.undo_last_action()
-```
-
----
-
-## Model Context Protocol (MCP) Server
-
-Connect WinTerM directly to **Google Antigravity**, **Claude Desktop**, **Claude Code**, or any MCP-compatible AI agent framework. WinTerM exposes a full suite of 32 low-level and high-level tools alongside standardized agent guidance prompts.
-
-### Claude Code Integration (1-Command Setup)
-Add WinTerM directly to **Claude Code** via the CLI:
-```bash
-claude mcp add winterm python -m winterm.tools.mcp_server
-```
-Claude Code automatically reads the repository instructions in [`CLAUDE.md`](CLAUDE.md) and custom skills in [`.claude/skills/winterm/`](.claude/skills/winterm/).
-
-### OpenCode Integration
-OpenCode connects automatically via the repository's [`opencode.json`](opencode.json) and reads operating guidelines from [`OPENCODE.md`](OPENCODE.md):
-```json
-{
-  "mcp": {
-    "winterm": {
-      "type": "local",
-      "command": ["python", "-m", "winterm.tools.mcp_server"]
-    }
-  }
-}
-```
-
-### Generic MCP Client Configuration (Claude Desktop, Google Antigravity, Cursor)
-Add to your `mcp_config.json` or Claude Desktop configuration:
+#### For Claude Code (`~/.claude/mcp.json` or `claude mcp add`):
 ```json
 {
   "mcpServers": {
     "winterm": {
       "command": "python",
-      "args": ["-m", "winterm.tools.mcp_server"],
-      "cwd": "d:/Agent_toolkit"
+      "args": ["-m", "winterm.tools.mcp_server"]
     }
   }
 }
 ```
 
-### Exposed MCP Tools (51 Total):
-
-#### 1. Core Execution & 5W Cognitive Engine (7 Tools)
-- `plan_terminal_task`: Decomposes natural language goals into staged Directed Acyclic Graph (DAG) execution plans.
-- `explain_terminal_command`: Generates 5W Decision Trace explaining What, How, When, Why, and What Happens After.
-- `predict_command_impact`: Pre-execution state diff simulation (files, registry, processes, ports), risk score, and rollback synthesis.
-- `execute_terminal_command`: Hardened, UTF-8 safe execution with timeout protection and autonomous self-healing.
-- `diagnose_terminal_error`: Analyzes stderr and exit codes, classifies Windows error signatures, and proposes concrete remediation.
-- `query_windows_knowledge`: Searches the internal Windows knowledge base for command syntax, shell rules, and environment pitfalls.
-- `undo_last_terminal_action`: Reverts the last state-modifying action from the rollback history stack.
-
-#### 2. Linux & WSL2 Subsystem (5 Tools)
-- `winterm_linux_execute`: Executes bash / POSIX commands with deterministic safety guard checks, non-interactive flags, and self-healing.
-- `winterm_linux_path_convert`: Bidirectional path conversion between Windows format (`C:\...`) and Linux format (`/mnt/c/...`).
-- `winterm_linux_distro_list`: Queries installed WSL distributions, running states, and default distro.
-- `winterm_linux_safety_check`: Deterministic safety analysis blocking destructive commands (`rm -rf /`, raw disk writes, fork bombs).
-- `winterm_linux_diagnose_error`: POSIX and Linux error diagnosis covering exit codes 127, 126, 137 OOM, EADDRINUSE, and dpkg locks.
-
-#### 3. Knowledge Graph & Semantic Reasoning (8 Tools)
-- `winterm_graph_blast_radius`: Cascading blast radius analysis (direct + transitive dependent services) with risk scoring.
-- `winterm_graph_validate_command`: Validates command flags against the 10,374-node Knowledge Graph to catch hallucinations and suggest typos.
-- `winterm_graph_remedy_error`: Resolves multi-step error recovery paths for Windows HRESULTs and Win32 codes.
-- `winterm_graph_alternatives`: Cross-shell equivalence lookup (PowerShell cmdlet <-> native Win32 binary).
-- `winterm_graph_info`: Knowledge Graph topological metrics and ontological entity summary.
-- `winterm_graph_search_intent`: Resolves natural language intents against indexed Windows command datasets.
-- `winterm_graph_command_docs`: Official Microsoft documentation, syntax, and parameter dictionaries for 144+ Windows binaries.
-- `winterm_graph_safety_check`: Evaluates command safety tier, credential sensitivity, and security warnings.
-
-#### 4. Universal Application Discovery, Lifecycle & Dynamic Learning (4 Tools)
-- `winterm_app_find`: Discovers installed applications across `shell:AppsFolder`, Start Menu shortcuts, and Uninstall registry keys.
-- `winterm_app_launch`: Universally launches any Windows application (Win32 executable, UWP/AUMID Store app, or protocol URI).
-- `winterm_app_close`: Gracefully closes (`WM_CLOSE`/`CloseMainWindow`) or forcefully terminates processes.
-- `winterm_app_learn`: Probes local CLI help (`--help`, `/?`), parses parameter switches, and queries Knowledge Graph for usage patterns.
-
-#### 5. Window Management & Focus Automation (4 Tools)
-- `winterm_window_list`: Enumerates all visible top-level desktop windows with handles (HWND), titles, PIDs, bounds, and states.
-- `winterm_window_focus`: Unlocks Windows UIPI focus locks, attaches input threads, and brings target windows to the foreground.
-- `winterm_window_resize`: Repositions and resizes application windows to deterministic coordinates and dimensions.
-- `winterm_window_close`: Sends native Win32 `WM_CLOSE` messages to gracefully close windows without terminating background threads.
-
-#### 6. UI Automation & Input Synthesis (9 Tools)
-- `winterm_ui_inspect`: Traverses Windows UI Automation element trees (buttons, inputs, menus, list items) with bounding box geometry.
-- `winterm_ui_click`: Invokes elements via native `InvokePattern` with mouse coordinate fallback.
-- `winterm_ui_set_text`: Sets text in edit/input controls via native `ValuePattern` with SendKeys fallback.
-- `winterm_input_type`: Types keyboard text via SendKeys with configurable inter-key delays.
-- `winterm_input_hotkey`: Simulates hotkeys and key combinations (`Ctrl+C`, `Win+R`, `Alt+F4`, `Ctrl+Shift+P`).
-- `winterm_input_mouse_click`: Moves cursor to (X, Y) and performs mouse clicks (left, right, middle, double-click).
-- `winterm_input_mouse_drag`: Performs drag-and-drop mouse gestures from start to end coordinates with guaranteed mouse-up release blocks.
-- `winterm_screen_state`: Queries live display resolution, active cursor position, and foreground window metrics.
-- `winterm_screen_capture`: Captures high-resolution visual screenshots of the full desktop or target window as PNG for visual perception.
-
-#### 7. Advanced UI Perception, OCR & Set-of-Mark Grounding (5 Tools)
-- `winterm_ui_perceive`: High-level multimodal perception combining live capture, WinRT OCR, Set-of-Mark visual annotation, and token-pruned semantic Markdown tree.
-- `winterm_ui_ocr`: Zero-dependency, hardware-accelerated Windows OCR via native WinRT (`Windows.Media.Ocr.OcrEngine`) returning words, lines, pixel bounds, and centers.
-- `winterm_ui_som_annotate`: Overlays high-contrast bounding boxes and numbered badge tags (`[1]`, `[2]`, `[3]`) directly onto interactive UI elements for zero-hallucination visual grounding.
-- `winterm_ui_smart_click`: Multi-strategy intelligent click cascading from UIAutomation exact/fuzzy match down to Native OCR visual fallback and coordinate execution.
-- `winterm_ui_wait_change`: Asynchronous closed-loop visual state verifier using 4x4 stride sampling to detect rendering transitions and eliminate race conditions.
-
-#### 8. Reusable Task Playbooks & Script Justification (4 Tools)
-- `winterm_playbook_create`: Generates defensive task scripts with typed parameters. Enforces `ScriptJustificationGate` (blocks atomic one-liners, approving only multi-step workflows, loops, branching, or rollback logic).
-- `winterm_playbook_match_run`: Matches recurring user situations against the playbook catalog, extracts parameters, and executes the compiled script.
-- `winterm_playbook_list`: Lists all registered, reusable task playbooks with parameter schemas, safety tiers, and execution telemetry.
-- `winterm_playbook_prune`: Prunes stale or least recently used playbooks down to a target count (LRU policy) to eliminate disk and resource waste.
-
-#### 9. Multi-Agent Swarm & Layered Safety (5 Tools)
-- `winterm_swarm_dispatch`: Spawns and registers autonomous sub-agents with strictly defined capability scopes (`READ_ONLY_AUDIT`, `UI_OPERATOR`, `TERMINAL_EXECUTOR`, `NETWORK_INSPECTOR`, `FULL_SUPERVISOR`).
-- `winterm_swarm_board_read`: Reads messages, status reports, and alerts from the shared in-memory blackboard bus.
-- `winterm_swarm_board_post`: Broadcasts supervisor directives, progress updates, or telemetry across the swarm.
-- `winterm_swarm_suggestions`: Reviews, approves, or rejects proactive recommendations and self-healing proposals submitted by autonomous sub-agents.
-- `winterm_swarm_status`: Retrieves comprehensive swarm telemetry, sub-agent lifecycle states, and circuit breaker trip counters.
-
-### Exposed MCP Prompts
-- `windows_agent_instructions`: Out-of-the-box system prompt that grounds autonomous agents in the Windows closed-loop automation protocol.
-
----
-
-## Autonomous Agent Interaction Paradigm: The Closed-Loop Protocol
-
-When an AI agent interacts with the Windows desktop and terminal, it must **never write one-off hardcoded automation scripts**. WinTerM enforces a rigorous 4-phase closed loop:
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         THE CLOSED-LOOP AGENT CYCLE                         │
-│                                                                             │
-│   1. SENSE      Inspect app existence, active windows, UI trees, and screen  │
-│        │                                                                    │
-│        ▼                                                                    │
-│   2. DECIDE     Classify app class (A/B/C) & formulate generic actions      │
-│        │                                                                    │
-│        ▼                                                                    │
-│   3. ACT        Focus target window & execute guarded toolkit primitives     │
-│        │                                                                    │
-│        ▼                                                                    │
-│   4. VERIFY     Check post-conditions (UIA tree state / visual screenshot)  │
-└─────────────────────────────────────────────────────────────────────────────┘
+#### For Google Antigravity / Gemini CLI (`mcp_config.json`):
+```json
+{
+  "mcpServers": {
+    "winterm": {
+      "command": "python",
+      "args": ["-m", "winterm.tools.mcp_server"]
+    }
+  }
+}
 ```
 
-### The Anti-Pattern: Why Agents Must NOT Write One-Off Python Scripts
-Autonomous agents frequently fall into the trap of writing temporary `.py` scripts containing hardcoded pixel coordinates, assumptions about file paths, or raw `mouse_event` loops. In real Windows environments, this pattern fails catastrophically:
-1. **DPI & Resolution Fragility**: Hardcoded screen coordinates (e.g. `(400, 300)`) break across displays, scaling factors (100%, 125%, 150%, 200%), and window movements.
-2. **Missing Executables**: Hardcoding fixed paths (e.g. `C:\Windows\System32\mspaint.exe`) causes instant failures when apps are packaged as modern MSIX/Store packages, installed in user profiles, or uninstalled.
-3. **Input Leakage & Desktop Hijacking**: Injecting global keyboard or mouse events without verifying that the target window has foreground focus directs strokes into background windows (such as the developer's IDE or terminal), corrupting source code.
-4. **Input Queue Freezing**: If a script performs a mouse-down or key-down and crashes before the corresponding release event, the entire OS input queue can become locked. WinTerM wraps all gestures in native `try...finally` release blocks.
+#### For Cursor / Windsurf (`mcp.json`):
+```json
+{
+  "mcpServers": {
+    "winterm": {
+      "command": "python",
+      "args": ["-m", "winterm.tools.mcp_server"]
+    }
+  }
+}
+```
 
-### The 4-Phase Protocol in Practice
-
-#### Phase 1: SENSE
-Before taking any action, establish ground-truth system state:
-- Check if the app is installed: `winterm_app_find(query="paint")`.
-- If not installed, inform the user or install via `winget install <id>`.
-- Check if the app is already open: `winterm_window_list(query="paint")`.
-- Establish desktop boundaries: `winterm_screen_state()`.
-
-#### Phase 2: DECIDE
-Classify the target application and select the appropriate interaction channel:
-- **Class A: Standard Win32 / WPF / UWP Applications** (e.g. Calculator, Notepad, File Explorer):
-  - Traversed via `winterm_ui_inspect(window_identifier)`.
-  - Manipulated via deterministic automation IDs and control names (`winterm_ui_click`, `winterm_ui_set_text`).
-- **Class B: Electron / Chromium Applications** (e.g. VS Code, Slack, Chrome, Edge):
-  - Manipulated via keyboard accelerators and command palettes (`winterm_input_hotkey(keys=['ctrl', 'shift', 'p'])`).
-  - Navigated via standard URL/omnibar shortcuts (`Ctrl+L`).
-- **Class C: Raw Canvas / DirectX / GDI Applications** (e.g. Paint canvas, games, CAD viewports):
-  - Lacks granular child UI elements in the UIA tree.
-  - Perceived via visual capture (`winterm_screen_capture`).
-  - Target coordinates are calculated as relative offsets within the target window's known bounding box (`winterm_window_list`), never blind screen coordinates.
-
-#### Phase 3: ACT
-- Explicitly bring the target window to the foreground: `winterm_window_focus(window_identifier)`.
-- Execute the chosen action using generic toolkit tools:
-  - Text input: `winterm_input_type(text="...")`.
-  - Hotkey: `winterm_input_hotkey(keys=["ctrl", "s"])`.
-  - Point & Click: `winterm_input_mouse_click(x=..., y=...)`.
-  - Vector gesture: `winterm_input_mouse_drag(start_x=..., start_y=..., end_x=..., end_y=...)`.
-
-#### Phase 4: VERIFY
-- Confirm state mutation:
-  - Check window title updates or dialog prompts: `winterm_window_list()`.
-  - Re-inspect UI elements: `winterm_ui_inspect()`.
-  - Capture verification screenshot: `winterm_screen_capture(output_path="...")`.
-- If the action failed, call `diagnose_terminal_error` or query `winterm_graph_remedy_error` to self-heal.
-
----
-
-## Command-Line Interface (`winterm`)
-
-WinTerM provides a modular CLI interface matching all toolkit capabilities:
+### 3. Use Directly from the Terminal (`winterm` CLI)
+WinTerM includes an interactive command-line interface:
 
 ```powershell
-# ==============================================================================
-# System Information & 10-Layer Subsystem Capabilities
-# ==============================================================================
+# Inspect your Windows environment and capabilities
 winterm info
-winterm subsystems
 
-# ==============================================================================
-# 5W Cognitive Planning & Execution
-# ==============================================================================
-winterm plan "Find what process is using port 8080 and terminate it"
-winterm explain "Stop-Process -Id 1234 -Force"
+# Plan a task with the 5W cognitive engine
+winterm plan "Find what process is using port 8080 and stop it"
+
+# Execute a task safely with dry-run simulation
 winterm run "Query top 5 memory processes" --dry-run
-winterm run "Restart audio service" --auto-heal
-winterm diagnose "0x80070005: Access is denied."
 
-# ==============================================================================
-# Knowledge Graph & Dataset Reasoning (10,374 Nodes, 5,675 Edges)
-# ==============================================================================
-winterm graph info
-winterm graph blast-radius RpcSs --depth 2
-winterm graph validate "Get-Process -Name svchost -Id 1234"
-winterm graph search-intent "find files modified today"
-winterm graph docs robocopy
-winterm graph safety "Format-Volume -DriveLetter D"
-winterm graph remedy 0x80070005
-winterm graph alternatives Stop-Process
+# Read all text off any application screen using native OCR
+winterm ui ocr 789800
 
-# ==============================================================================
-# Application Discovery, Lifecycle & Dynamic Learning
-# ==============================================================================
-winterm app find "calculator"
-winterm app launch "calc.exe"
-winterm app learn "ping"
-winterm app close "Calculator"
+# Focus a window and bring it to foreground
+winterm window focus 789800
 
-# ==============================================================================
-# Top-Level Window Management
-# ==============================================================================
-winterm window list
-winterm window focus "Notepad"
-winterm window resize "Notepad" 100 100 1024 768
-winterm window close "Notepad"
+# Type text into the active window
+winterm input type "Hello from WinTerM"
+```
 
-# ==============================================================================
-# Keyboard, Mouse & UI Automation
-# ==============================================================================
-winterm input inspect "Calculator"
-winterm input type "Hello World from WinTerm Agent"
-winterm input hotkey ctrl c
-winterm input click 500 400 --button left
-winterm input drag 100 100 400 400
+### 4. Use as a Python SDK
+```python
+from winterm.agent.winterm_agent import WinTermAgent
 
-# ==============================================================================
-# Live Screen Perception & Capture
-# ==============================================================================
-winterm screen state
-winterm screen capture --output screenshot.png
-winterm screen capture --output app.png --window "Calculator"
+agent = WinTermAgent()
 
-# ==============================================================================
-# Reusable Task Playbooks & Quota Management
-# ==============================================================================
-winterm playbook list
-winterm playbook run pb-a1b2c3d4 -p Port=8080
-winterm playbook prune --max 30
+# Plan and execute a goal with autonomous verification
+result, verif, trace = agent.run("Query network configuration")
+print(result.stdout)
+
+# Extract text from a window using hardware-accelerated WinRT OCR
+ocr_result = agent.ocr_window("Chrome")
+for line in ocr_result.get("lines", []):
+    print(line["text"])
 ```
 
 ---
 
-## Script Justification Gate & Reusable Playbooks Engine
+## 📚 Complete Documentation Hub
 
-Autonomous agents frequently produce script clutter by writing temporary `.ps1` or `.sh` files for trivial, atomic one-liners. WinTerM solves this with the **Script Justification Gate** and **Playbook Engine**:
+For deep architectural guides, API schemas, and manuals, explore the `docs/` directory:
 
-1. **Anti-Waste Principle (Direct Execution First)**:
-   - Atomic single-step commands (e.g. `ipconfig`, `Get-Process`, `ls -la`, `docker ps`, `Stop-Process -Id 1234`) are **strictly forbidden** from generating scripts. WinTerM executes them directly in the terminal with zero disk I/O, zero compilation latency, and zero catalog clutter.
-2. **Strict Script Justification Criteria**:
-   - `ScriptJustificationGate` approves script synthesis (`winterm_playbook_create`) **only and strictly if**:
-     - The task requires multi-step workflow sequencing ($\ge 2$ interdependent commands).
-     - The task includes conditional branching (`if/else`, `switch`, `case`).
-     - The task includes iterative loops (`foreach`, `while`, `for`).
-     - The task includes transactional error recovery or compensation traps (`try/catch/finally`).
-3. **Automatic Generalization & Recurrence Promotion**:
-   - WinTerM tracks candidate routines in an ephemeral 50-item ring buffer.
-   - When a multi-step task recurs ($\ge 2$ runs), WinTerM automatically generalizes hardcoded literals (ports, filesystem paths, service names, PIDs) into typed parameter schemas (`param([int]$Port = 8080)`) and compiles a defensive, standalone script.
-4. **Deterministic Quota Enforcement**:
-   - A hard boundary of **50 playbooks** is strictly enforced.
-   - When the quota is exceeded, least recently used (LRU) playbooks and their underlying script files are automatically pruned.
+| Document | Description |
+| :--- | :--- |
+| **[Documentation Index](docs/README.md)** | Overview and navigational guide across all documentation. |
+| **[Architecture & Engine](docs/ARCHITECTURE.md)** | Complete 10-layer architecture, 5W cognitive model, and execution engine. |
+| **[54 MCP Tools Reference](docs/MCP_TOOLS.md)** | Detailed reference for all 54 tools with parameter schemas and JSON examples. |
+| **[CLI Reference Guide](docs/CLI_REFERENCE.md)** | Complete syntax and options for all `winterm` commands. |
+| **[UI Perception & Actions Guide](docs/UI_PERCEPTION_AND_ACTIONS.md)** | Deep dive into WinRT OCR, Set-of-Mark visual grounding, Screen Mental Map, and input safety. |
+| **[Proofs & Benchmarks](docs/PROOFS_AND_BENCHMARKS.md)** | Real-world execution logs, autonomous Chrome/Notepad proofs, and test metrics. |
 
 ---
 
-## Running Tests
+## 🤖 Native Agent Integration Manuals
 
-Run the full automated test suite using pytest:
-```powershell
-python -m pytest tests/ -v
+WinTerM provides specialized, first-class configuration manuals for leading agent frameworks:
+- **[AGENTS.md](AGENTS.md)**: Universal autonomous operating protocol (Sense $\rightarrow$ Decide $\rightarrow$ Act $\rightarrow$ Verify).
+- **[CLAUDE.md](CLAUDE.md)**: Native instructions for Claude Code and custom skills.
+- **[GEMINI.md](GEMINI.md)**: Native instructions for Google Gemini / Antigravity multimodal vision.
+- **[DEEPSEEK.md](DEEPSEEK.md)**: Native instructions for DeepSeek-R1 CoT reasoning tokens.
+- **[OPENCODE.md](OPENCODE.md)**: Native instructions for local open-source agent execution.
+
+---
+
+## 🧪 Test Suite & Reliability Benchmarks
+
+WinTerM is tested against a rigorous automated test suite covering unit logic, integration flows, CLI commands, and safety gates:
+
+```text
+============================= 182 passed in 21.19s =============================
 ```
-
-All **149 out of 149 automated tests (100%)** pass cleanly across all 11 architectural layers, CLI command sets, Knowledge Graph reasoning routines, Playbook justification gates, Multi-Agent Swarm sandboxes, and MCP server integrations.
-
----
-
-## Community, Contributing & Governance 🤝
-
-**WinTerM** is open-source and built for the global AI agent developer community. We believe the future of autonomous computing on Windows will be built collaboratively.
-
-- 📖 **Contributor Guide**: Read our [CONTRIBUTING.md](CONTRIBUTING.md) for architecture deep-dives, step-by-step guides on adding subsystems/tools, and development setup.
-- 🗺️ **Project Roadmap**: See our public vision, active development milestones, and community bounties in [ROADMAP.md](ROADMAP.md).
-- 📜 **Code of Conduct**: We are committed to an inclusive, welcoming community. See [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
-- 🐛 **Report Issues & Incidents**:
-  - Found a bug? File a [Bug Report](https://github.com/shiva2321/WinTerM/issues/new?template=bug_report.md).
-  - Did an AI agent hallucinate a Windows command or hang on stdin? File an [AI Agent Incident Report](https://github.com/shiva2321/WinTerM/issues/new?template=agent_incident_report.md).
-  - Want a new Windows API, subsystem primitive, or tool? Submit a [Feature Request](https://github.com/shiva2321/WinTerM/issues/new?template=feature_request.md).
-- 💬 **Join the Conversation**: Connect with agent builders on [GitHub Discussions](https://github.com/shiva2321/WinTerM/discussions).
+- **Total Tests**: 182 passed / 0 failed (100% pass rate).
+- **Knowledge Graph Density**: 10,374 nodes and 5,675 edges defending against hallucinated parameters across 144+ Windows binaries and cmdlets.
+- **Safety Guarantee**: High-destructive commands (`Remove-Item` on system roots, `Format-Volume`, `diskpart`, `Stop-Computer`) are intercepted and rejected by default unless explicitly confirmed.
 
 ---
 
-## License & Commercial Rights 📄
+## 📄 License & Contributing
 
-WinTerM is distributed under the **Source-Available & Commercial Restriction License** (see [`LICENSE`](LICENSE)).
-
-### Permitted Free Use
-- ✅ **Personal & Hobbyist Use**: Free for individual developers, exploration, and learning.
-- ✅ **Academic & Research**: Free for non-profit educational and scientific research.
-- ✅ **Evaluation & Auditing**: Free for security audits, testing, and benchmark evaluation.
-- ✅ **Open-Source Contributions**: Free for community bug fixes and public PRs.
-
-### Commercial, Startup & Enterprise Restriction
-- ⛔ **Commercial, Startup & Enterprise Usage Strictly Restricted**: For-profit businesses, startups, corporations, and enterprise entities MAY NOT use, embed, bundle, run in production, or offer WinTerM as a commercial service without express written permission and a commercial license granted directly by the author.
-- 📬 **Commercial Inquiries & Permission**: To request a commercial usage grant, enterprise license, or partnership, contact the author directly via [GitHub Profile](https://github.com/shiva2321) or open a commercial permission request on [GitHub Discussions](https://github.com/shiva2321/WinTerM/discussions).
+- **Contributing**: Contributions, bug reports, and feature proposals are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
+- **Roadmap**: See [ROADMAP.md](ROADMAP.md) for upcoming milestones and future subsystem layers.
+- **License**: Source-available with commercial permission required. See [LICENSE](LICENSE) for terms.

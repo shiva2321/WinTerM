@@ -129,7 +129,7 @@ class TestSmartUIResolver:
         # Strategy 1: UIAutomation
         assert "STRATEGY 1: UIAutomation Tree Search" in cmd
         assert "InvokePattern" in cmd
-        assert "CoordinateClick" in cmd
+        assert "ClickInWindow" in cmd
         # Strategy 2: OCR Fallback
         assert "STRATEGY 2: Native Windows OCR Fallback" in cmd
         assert "Windows.Media.Ocr.OcrEngine" in cmd
@@ -204,25 +204,31 @@ class TestSubsystemAndAgentPerceptionIntegration:
 
 
 class TestUIPerceptionMCPTools:
-    def test_mcp_server_registers_all_51_tools(self):
+    def test_mcp_server_registers_all_54_tools(self):
         server = WinTermMCPServer()
-        assert len(server.tools) == 51
+        assert len(server.tools) == 54
         assert "winterm_ui_perceive" in server.tools
         assert "winterm_ui_ocr" in server.tools
         assert "winterm_ui_som_annotate" in server.tools
         assert "winterm_ui_smart_click" in server.tools
         assert "winterm_ui_wait_change" in server.tools
-        assert len(EXPORTED_TOOLS_SCHEMA) == 51
+        assert "winterm_screen_mental_map" in server.tools
+        assert "winterm_ui_hover" in server.tools
+        assert "winterm_ui_scroll_into_view" in server.tools
+        assert len(EXPORTED_TOOLS_SCHEMA) == 54
 
     def test_mcp_server_list_tools_contains_perception_tools(self):
         server = WinTermMCPServer()
         res = server.handle_request({"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}})
         assert res["id"] == 1
         tools = res["result"]["tools"]
-        assert len(tools) == 51
+        assert len(tools) == 54
         tool_names = [t["name"] for t in tools]
         assert "winterm_ui_perceive" in tool_names
         assert "winterm_ui_ocr" in tool_names
         assert "winterm_ui_som_annotate" in tool_names
         assert "winterm_ui_smart_click" in tool_names
         assert "winterm_ui_wait_change" in tool_names
+        assert "winterm_screen_mental_map" in tool_names
+        assert "winterm_ui_hover" in tool_names
+        assert "winterm_ui_scroll_into_view" in tool_names

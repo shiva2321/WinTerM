@@ -82,6 +82,17 @@ def test_keyboard_hotkeys():
     assert "SendHotkey" in win_r
     assert "win" in win_r
 
+    # Win+D combination (both list and compound string formats)
+    win_d_list = engine.build_hotkey_command(["win", "d"])
+    assert "SendHotkey" in win_d_list
+    assert "win" in win_d_list
+    assert "68" in win_d_list  # ord('D') == 68
+
+    win_d_compound = engine.build_hotkey_command("windows+d")
+    assert "SendHotkey" in win_d_compound
+    assert "windows" in win_d_compound
+    assert "68" in win_d_compound
+
     # Single-key repetition
     enter_script = engine.build_press_key_command("enter", count=3)
     assert "{ENTER 3}" in enter_script

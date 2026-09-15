@@ -42,15 +42,26 @@ class KeyboardEngine:
     VK_CODES = {
         "lwin": 0x5B,
         "rwin": 0x5C,
+        "win": 0x5B,
+        "windows": 0x5B,
         "tab": 0x09,
         "enter": 0x0D,
+        "return": 0x0D,
         "escape": 0x1B,
+        "esc": 0x1B,
         "space": 0x20,
+        "backspace": 0x08,
+        "bksp": 0x08,
         "left": 0x25,
         "up": 0x26,
         "right": 0x27,
         "down": 0x28,
         "delete": 0x2E,
+        "del": 0x2E,
+        "home": 0x24,
+        "end": 0x23,
+        "pageup": 0x21,
+        "pagedown": 0x22,
     }
 
     WIN32_KBD_HEADER = (
@@ -213,19 +224,26 @@ class KeyboardEngine:
     @classmethod
     def build_hotkey_command(cls, modifiers: Any, key: Optional[str] = None) -> str:
         """Generates a PowerShell command to send a key combination via native Win32 keybd_event."""
+        tokens = []
         if isinstance(modifiers, str):
-            mods = [modifiers]
+            raw_list = [modifiers]
         elif isinstance(modifiers, (list, tuple)):
-            mods = list(modifiers)
+            raw_list = list(modifiers)
         else:
-            mods = []
+            raw_list = []
 
-        if key is None:
-            if not mods:
-                return "@{ Action = 'EmptyHotkey'; Success = $False } | ConvertTo-Json -Compress"
-            target_key = mods.pop()
-        else:
-            target_key = key
+        for item in raw_list:
+            if item:
+                tokens.extend([p.strip() for p in re.split(r'[\+\-\s]+', str(item)) if p.strip()])
+
+        if key is not None:
+            tokens.extend([p.strip() for p in re.split(r'[\+\-\s]+', str(key)) if p.strip()])
+
+        if not tokens:
+            return "@{ Action = 'EmptyHotkey'; Success = $False } | ConvertTo-Json -Compress"
+
+        target_key = tokens.pop()
+        mods = tokens
 
         lower_mods = [m.lower().strip() for m in mods]
         lower_key = target_key.lower().strip()
@@ -265,6 +283,22 @@ class KeyboardEngine:
             "@{ Action = 'PressKey'; Key = '" + key + "'; Count = " + str(count) + "; Success = $True } | ConvertTo-Json -Compress"
         )
 
+    @classmethod
+    def build_type_with_clear_command(cls, text: str, delay_ms: int = 15, interval_ms: Optional[int] = None) -> str:
+        """Clears existing content via Ctrl+A and Backspace, then types replacement text using SendInput."""
+        effective_delay = interval_ms if interval_ms is not None else delay_ms
+        ps_escaped = text.replace("'", "''")
+        return (
+            f"{cls.WIN32_KBD_HEADER}"
+            # Send Ctrl+A then Backspace
+            "[Win32KbdCore]::SendHotkey(0x11, 0x41, $false, $false, $false, $false);\n"
+            "Start-Sleep -Milliseconds 60;\n"
+            "[Win32KbdCore]::PressKey(0x08, 1);\n"
+            "Start-Sleep -Milliseconds 60;\n"
+            f"[Win32KbdCore]::TypeUnicode('{ps_escaped}', {effective_delay});\n"
+            f"@{{ Action = 'TypeWithClear'; Length = {len(text)}; Success = $True }} | ConvertTo-Json -Compress"
+        )
+
     # Aliases for convenience
     build_type_command = build_type_text_command
     escape_sendkeys = escape_for_sendkeys
@@ -277,4 +311,5 @@ class KeyboardEngine:
     @classmethod
     def generate_sendkeys_hotkey(cls, keys: str) -> str:
         return cls.build_hotkey_command([keys])
+
 

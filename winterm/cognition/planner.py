@@ -312,10 +312,13 @@ class TerminalPlanner:
             txt_m = re.search(r'type\s+(?:text|into|string)\s*(.*)', lower_goal)
             txt_val = txt_m.group(1).strip() if txt_m and txt_m.group(1).strip() else "Hello Windows"
             steps.append(DesktopGuiSubsystem.type_text(txt_val))
-        elif any(w in lower_goal for w in ["press hotkey", "send hotkey", "keyboard shortcut"]):
-            hk_m = re.search(r'(?:hotkey|shortcut)\s+([a-zA-Z0-9_\-\+\s]+)', lower_goal)
-            raw_keys = hk_m.group(1).strip() if hk_m else "ctrl+c"
-            parsed_keys = [k.strip() for k in re.split(r'[\+\s]+', raw_keys) if k.strip()]
+        elif any(w in lower_goal for w in ["press hotkey", "send hotkey", "keyboard shortcut", "press windows", "press win", "press key", "press keys", "show desktop", "minimize all windows"]):
+            if "show desktop" in lower_goal or "minimize all" in lower_goal:
+                parsed_keys = ["win", "d"]
+            else:
+                hk_m = re.search(r'(?:hotkey|shortcut|press|send)\s+(?:the\s+)?([a-zA-Z0-9_\-\+\s]+?)(?:\s+key|\s+keys)?$', lower_goal)
+                raw_keys = hk_m.group(1).strip() if hk_m else "ctrl+c"
+                parsed_keys = [k.strip() for k in re.split(r'[\+\s]+', raw_keys) if k.strip()]
             steps.append(DesktopGuiSubsystem.press_hotkey(parsed_keys))
         elif any(w in lower_goal for w in ["click mouse", "mouse click"]):
             m_clk = re.search(r'click\s+(?:mouse\s+)?(?:at\s+)?(\d+)\s+(\d+)', lower_goal)
