@@ -1,5 +1,6 @@
 """Terminal Agent Session: Tracks multi-turn history, state diff timeline, and undo log."""
 
+import threading
 import time
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel, Field
@@ -83,24 +84,27 @@ class AgentSessionCoordinator:
 
     _sessions: Dict[str, AgentSession] = {}
     _locks: Dict[str, ResourceLock] = {}
+    _lock: threading.RLock = threading.RLock()
 
     @classmethod
     def register_session(cls, session: AgentSession) -> None:
         """Registers an active agent session in the coordinator registry."""
-        cls._sessions[session.session_id] = session
+        with cls._lock:
+            cls._sessions[session.session_id] = session
 
     @classmethod
     def get_active_sessions(cls) -> List[Dict[str, Any]]:
         """Returns metadata of all currently registered agent sessions."""
-        return [
-            {
-                "session_id": s.session_id,
-                "agent_framework": s.agent_framework,
-                "steps_executed": len(s.history),
-                "has_active_plan": s.active_plan is not None,
-            }
-            for s in cls._sessions.values()
-        ]
+        with cls._lock:
+            return [
+                {
+                    "session_id": s.session_id,
+                    "agent_framework": s.agent_framework,
+                    "steps_executed": len(s.history),
+                    "has_active_plan": s.active_plan is not None,
+                }
+                for s in cls._sessions.values()
+            ]
 
     @classmethod
     def acquire_resource_lock(
@@ -111,46 +115,50 @@ class AgentSessionCoordinator:
         ttl_seconds: float = 60.0,
     ) -> bool:
         """Acquires a cooperative lock on a shared resource (window, port, file) for an agent session."""
-        cls.clean_expired_locks()
-        now = time.time()
+        with cls._lock:
+            cls.clean_expired_locks()
+            now = time.time()
 
-        if resource_id in cls._locks:
-            lock = cls._locks[resource_id]
-            # Re-entrant for the same session
-            if lock.owner_session_id == session_id:
-                lock.expires_at = now + ttl_seconds
-                return True
-            return False
+            if resource_id in cls._locks:
+                lock = cls._locks[resource_id]
+                # Re-entrant for the same session
+                if lock.owner_session_id == session_id:
+                    lock.expires_at = now + ttl_seconds
+                    return True
+                return False
 
-        cls._locks[resource_id] = ResourceLock(
-            resource_id=resource_id,
-            owner_session_id=session_id,
-            owner_framework=framework,
-            acquired_at=now,
-            expires_at=now + ttl_seconds,
-        )
-        return True
+            cls._locks[resource_id] = ResourceLock(
+                resource_id=resource_id,
+                owner_session_id=session_id,
+                owner_framework=framework,
+                acquired_at=now,
+                expires_at=now + ttl_seconds,
+            )
+            return True
 
     @classmethod
     def release_resource_lock(cls, resource_id: str, session_id: str) -> bool:
         """Releases a cooperative resource lock held by the specified session."""
-        if resource_id in cls._locks:
-            if cls._locks[resource_id].owner_session_id == session_id:
-                del cls._locks[resource_id]
-                return True
-        return False
+        with cls._lock:
+            if resource_id in cls._locks:
+                if cls._locks[resource_id].owner_session_id == session_id:
+                    del cls._locks[resource_id]
+                    return True
+            return False
 
     @classmethod
     def is_resource_locked(cls, resource_id: str) -> Optional[ResourceLock]:
         """Checks if a resource is currently locked by another active agent."""
-        cls.clean_expired_locks()
-        return cls._locks.get(resource_id)
+        with cls._lock:
+            cls.clean_expired_locks()
+            return cls._locks.get(resource_id)
 
     @classmethod
     def clean_expired_locks(cls) -> int:
         """Removes expired locks and returns the count of purged locks."""
-        now = time.time()
-        expired = [k for k, v in cls._locks.items() if v.expires_at < now]
-        for k in expired:
-            del cls._locks[k]
-        return len(expired)
+        with cls._lock:
+            now = time.time()
+            expired = [k for k, v in cls._locks.items() if v.expires_at < now]
+            for k in expired:
+                del cls._locks[k]
+            return len(expired)

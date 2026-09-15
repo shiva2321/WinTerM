@@ -247,7 +247,7 @@ class WinTermMCPServer:
                     "id": msg_id,
                     "result": {
                         "content": [
-                            {"type": "text", "text": json.dumps(result, indent=2)}
+                            {"type": "text", "text": json.dumps(result, indent=2, default=str)}
                         ]
                     },
                 }

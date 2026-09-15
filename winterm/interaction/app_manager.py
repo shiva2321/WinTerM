@@ -10,7 +10,8 @@ class WindowsAppManager:
     @classmethod
     def build_search_command(cls, query: Optional[str] = None, limit: int = 50) -> str:
         """Generates PowerShell command to search for installed applications across shell:AppsFolder, Start Menu, and Registry."""
-        clean_q = query.replace("'", "''") if query else ""
+        safe_limit = max(1, min(int(limit), 500))
+        clean_q = str(query).replace("'", "''") if query else ""
         filter_expr = f"$_.Name -like '*{clean_q}*' -or $_.Target -like '*{clean_q}*'" if query else "$True"
 
         # PowerShell script scanning shell:AppsFolder, Start Menu lnk files, and App Paths registry keys
@@ -67,7 +68,7 @@ class WindowsAppManager:
             "    } "
             "} "
             # Filter and output JSON
-            f"$results = $apps | Where-Object {{ {filter_expr} }} | Select-Object -First {limit}; "
+            f"$results = $apps | Where-Object {{ {filter_expr} }} | Select-Object -First {safe_limit}; "
             "@($results) | ConvertTo-Json -Compress"
         )
         return script

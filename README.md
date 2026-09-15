@@ -3,7 +3,7 @@
 [![GitHub Repo](https://img.shields.io/badge/GitHub-shiva2321%2FWinTerM-181717?logo=github)](https://github.com/shiva2321/WinTerM)
 [![Windows](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011%20%7C%20Server-0078D6?logo=windows)](https://microsoft.com)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python)](https://python.org)
-[![Tests](https://img.shields.io/badge/Tests-138%2F138%20Passing-brightgreen?logo=pytest)](https://github.com/shiva2321/WinTerM/actions)
+[![Tests](https://img.shields.io/badge/Tests-149%2F149%20Passing-brightgreen?logo=pytest)](https://github.com/shiva2321/WinTerM/actions)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Model Context Protocol](https://img.shields.io/badge/MCP-46%20Tools%20%2B%20Prompts-FF6B6B)](https://modelcontextprotocol.io)
 [![Gemini Ready](https://img.shields.io/badge/Gemini-Native%20Support-8E75B2?logo=google)](GEMINI.md)
@@ -573,7 +573,7 @@ Run the full automated test suite using pytest:
 python -m pytest tests/ -v
 ```
 
-All **138 out of 138 automated tests (100%)** pass cleanly across all 11 architectural layers, CLI command sets, Knowledge Graph reasoning routines, Playbook justification gates, Multi-Agent Swarm sandboxes, and MCP server integrations.
+All **149 out of 149 automated tests (100%)** pass cleanly across all 11 architectural layers, CLI command sets, Knowledge Graph reasoning routines, Playbook justification gates, Multi-Agent Swarm sandboxes, and MCP server integrations.
 
 ---
 

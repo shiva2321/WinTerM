@@ -18,7 +18,11 @@ class CommandSynthesizer:
         target_shell = step.target_shell
 
         # 1. Inject non-interactive switches to prevent terminal hangs
-        cmd = ReliabilityRules.make_non_interactive(cmd)
+        if target_shell in (ShellType.WSL_BASH, ShellType.BASH):
+            from winterm.knowledge.linux_safety import LinuxSafetyGuard
+            cmd = LinuxSafetyGuard.make_non_interactive(cmd)
+        else:
+            cmd = ReliabilityRules.make_non_interactive(cmd)
 
         # 2. Fix PowerShell condition syntax if present
         if target_shell in (ShellType.POWERSHELL_51, ShellType.POWERSHELL_7):

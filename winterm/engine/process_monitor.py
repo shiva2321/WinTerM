@@ -14,8 +14,9 @@ class WindowsProcessMonitor:
 
     def find_process_on_port(self, port: int) -> Optional[Dict[str, Any]]:
         """Identifies the process PID and name actively listening or established on a local TCP port."""
+        safe_port = int(port)
         script = (
-            f"Get-NetTCPConnection -LocalPort {port} -ErrorAction SilentlyContinue | "
+            f"Get-NetTCPConnection -LocalPort {safe_port} -ErrorAction SilentlyContinue | "
             f"Select-Object -First 1 -Property LocalPort,OwningProcess,State | "
             f"ForEach-Object {{ "
             f"$p = Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue; "
@@ -32,8 +33,9 @@ class WindowsProcessMonitor:
 
     def get_process_info(self, pid: int) -> Optional[Dict[str, Any]]:
         """Retrieves process details by PID."""
+        safe_pid = int(pid)
         script = (
-            f"Get-Process -Id {pid} -ErrorAction SilentlyContinue | "
+            f"Get-Process -Id {safe_pid} -ErrorAction SilentlyContinue | "
             f"Select-Object -Property Id,ProcessName,Path,WorkingSet64,StartTime,Responding | "
             f"ConvertTo-Json"
         )
@@ -47,8 +49,9 @@ class WindowsProcessMonitor:
 
     def get_service_info(self, service_name: str) -> Optional[Dict[str, Any]]:
         """Retrieves Windows service status and configuration."""
+        safe_name = str(service_name).replace("'", "''")
         script = (
-            f"Get-Service -Name '{service_name}' -ErrorAction SilentlyContinue | "
+            f"Get-Service -Name '{safe_name}' -ErrorAction SilentlyContinue | "
             f"Select-Object -Property Name,DisplayName,Status,StartType | "
             f"ConvertTo-Json"
         )

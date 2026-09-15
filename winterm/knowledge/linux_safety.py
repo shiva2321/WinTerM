@@ -219,3 +219,5 @@ class LinuxSafetyGuard:
                 cmd = re.sub(r"(\bapk\s+add\b)", r"\1 --no-cache", cmd, flags=re.IGNORECASE)
 
         return cmd
+
+    classify = evaluate

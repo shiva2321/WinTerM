@@ -215,13 +215,26 @@ class PlaybookManager:
             self._persist_playbook_file(playbook)
 
         if playbook.target_shell in (ShellType.POWERSHELL_51, ShellType.POWERSHELL_7):
-            arg_str = " ".join([f"-{k.capitalize()} '{v}'" for k, v in params.items()])
+            sanitized_args = []
+            for k, v in params.items():
+                safe_key = "".join(c for c in str(k) if c.isalnum() or c == "_")
+                safe_val = str(v).replace("'", "''")
+                sanitized_args.append(f"-{safe_key.capitalize()} '{safe_val}'")
+            arg_str = " ".join(sanitized_args)
             exec_command = f"& '{str(script_path)}' {arg_str}".strip()
         elif playbook.target_shell in (ShellType.WSL_BASH, ShellType.BASH):
-            arg_str = " ".join([f"'{v}'" for v in params.values()])
+            sanitized_args = []
+            for v in params.values():
+                safe_val = str(v).replace("'", "'\\''")
+                sanitized_args.append(f"'{safe_val}'")
+            arg_str = " ".join(sanitized_args)
             exec_command = f"bash '{str(script_path)}' {arg_str}".strip()
         else:
-            arg_str = " ".join([f'"{v}"' for v in params.values()])
+            sanitized_args = []
+            for v in params.values():
+                safe_val = str(v).replace('"', '""')
+                sanitized_args.append(f'"{safe_val}"')
+            arg_str = " ".join(sanitized_args)
             exec_command = f'cmd.exe /c "{str(script_path)}" {arg_str}'.strip()
 
         # Update telemetry

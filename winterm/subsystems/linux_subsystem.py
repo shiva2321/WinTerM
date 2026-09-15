@@ -71,37 +71,45 @@ class LinuxSubsystem:
         )
 
     @classmethod
+    def _sanitize_token(cls, val: str) -> str:
+        """Sanitizes identifiers (service names, package names, filters) to disallow bash command injection."""
+        return re.sub(r"[^a-zA-Z0-9_\-\.:@+]", "", str(val).strip())
+
+    @classmethod
     def inspect_service(cls, service_name: str) -> PlanStep:
         """Inspects status of a systemd service daemon inside Linux / WSL."""
+        clean_svc = cls._sanitize_token(service_name)
         return PlanStep(
-            step_id=f"linux-service-status-{service_name}",
-            title=f"Inspect Status of Linux Service: {service_name}",
+            step_id=f"linux-service-status-{clean_svc}",
+            title=f"Inspect Status of Linux Service: {clean_svc}",
             category=ActionCategory.SERVICE,
-            raw_intent=f"inspect service {service_name}",
+            raw_intent=f"inspect service {clean_svc}",
             target_shell=ShellType.WSL_BASH,
-            command=f"systemctl status {service_name} --no-pager",
-            metadata={"subsystem": "linux", "service": service_name, "action": "service_status"},
+            command=f"systemctl status {clean_svc} --no-pager",
+            metadata={"subsystem": "linux", "service": clean_svc, "action": "service_status"},
         )
 
     @classmethod
     def restart_service(cls, service_name: str) -> PlanStep:
         """Restarts a systemd service daemon inside Linux / WSL with elevated privileges."""
+        clean_svc = cls._sanitize_token(service_name)
         return PlanStep(
-            step_id=f"linux-service-restart-{service_name}",
-            title=f"Restart Linux Service: {service_name}",
+            step_id=f"linux-service-restart-{clean_svc}",
+            title=f"Restart Linux Service: {clean_svc}",
             category=ActionCategory.SERVICE,
-            raw_intent=f"restart service {service_name}",
+            raw_intent=f"restart service {clean_svc}",
             target_shell=ShellType.WSL_BASH,
             required_elevation=ElevationLevel.ADMIN,
-            command=f"sudo systemctl restart {service_name}",
-            metadata={"subsystem": "linux", "service": service_name, "action": "service_restart"},
+            command=f"sudo systemctl restart {clean_svc}",
+            metadata={"subsystem": "linux", "service": clean_svc, "action": "service_restart"},
         )
 
     @classmethod
     def list_processes(cls, filter_name: Optional[str] = None) -> PlanStep:
         """Lists active Linux processes, optionally filtering by executable name."""
         if filter_name:
-            cmd = f"ps aux | grep -i '{filter_name}' | grep -v grep"
+            clean_filter = cls._sanitize_token(filter_name)
+            cmd = f"ps aux | grep -i '{clean_filter}' | grep -v grep"
         else:
             cmd = "ps aux --sort=-%mem | head -n 30"
 
@@ -118,14 +126,16 @@ class LinuxSubsystem:
     @classmethod
     def kill_process(cls, pid: int, signal: int = 15) -> PlanStep:
         """Terminates a Linux process by PID using standard POSIX signal (15=SIGTERM, 9=SIGKILL)."""
+        clean_pid = int(pid)
+        clean_sig = int(signal)
         return PlanStep(
-            step_id=f"linux-kill-pid-{pid}",
-            title=f"Send Signal {signal} to Linux Process {pid}",
+            step_id=f"linux-kill-pid-{clean_pid}",
+            title=f"Send Signal {clean_sig} to Linux Process {clean_pid}",
             category=ActionCategory.PROCESS,
-            raw_intent=f"kill linux pid {pid}",
+            raw_intent=f"kill linux pid {clean_pid}",
             target_shell=ShellType.WSL_BASH,
-            command=f"kill -{signal} {pid}",
-            metadata={"subsystem": "linux", "pid": pid, "signal": signal, "action": "process_kill"},
+            command=f"kill -{clean_sig} {clean_pid}",
+            metadata={"subsystem": "linux", "pid": clean_pid, "signal": clean_sig, "action": "process_kill"},
         )
 
     @classmethod
@@ -183,24 +193,25 @@ class LinuxSubsystem:
     @classmethod
     def install_package(cls, package_name: str, manager: str = "auto") -> PlanStep:
         """Installs a Linux package with guaranteed non-interactive switches."""
+        clean_pkg = cls._sanitize_token(package_name)
         if manager == "apt" or manager == "auto":
-            cmd = f"sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y {package_name}"
+            cmd = f"sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y {clean_pkg}"
         elif manager == "dnf":
-            cmd = f"sudo dnf install -y {package_name}"
+            cmd = f"sudo dnf install -y {clean_pkg}"
         elif manager == "pacman":
-            cmd = f"sudo pacman -S --noconfirm {package_name}"
+            cmd = f"sudo pacman -S --noconfirm {clean_pkg}"
         elif manager == "apk":
-            cmd = f"apk add --no-cache {package_name}"
+            cmd = f"apk add --no-cache {clean_pkg}"
         else:
-            cmd = f"sudo apt-get install -y {package_name}"
+            cmd = f"sudo apt-get install -y {clean_pkg}"
 
         return PlanStep(
-            step_id=f"linux-pkg-install-{package_name}",
-            title=f"Install Linux Package: {package_name}",
+            step_id=f"linux-pkg-install-{clean_pkg}",
+            title=f"Install Linux Package: {clean_pkg}",
             category=ActionCategory.VIRTUALIZATION,
-            raw_intent=f"install package {package_name}",
+            raw_intent=f"install package {clean_pkg}",
             target_shell=ShellType.WSL_BASH,
             required_elevation=ElevationLevel.ADMIN,
             command=cmd,
-            metadata={"subsystem": "linux", "package": package_name, "action": "package_install"},
+            metadata={"subsystem": "linux", "package": clean_pkg, "action": "package_install"},
         )

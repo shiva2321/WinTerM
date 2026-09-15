@@ -142,14 +142,16 @@ class SubAgentSandbox:
             if shell in (ShellType.WSL_BASH, ShellType.BASH):
                 verdict = self.linux_safety_guard.classify(command)
                 if verdict and verdict.is_dangerous and not self.scope.allow_destructive:
+                    lbl = getattr(verdict, "label", getattr(verdict, "risk_level", "destructive"))
                     raise ScopeViolationError(
-                        f"Command '{command}' is classified as DESTRUCTIVE ({verdict.risk_level}) and is forbidden under scope."
+                        f"Command '{command}' is classified as DESTRUCTIVE ({lbl}) and is forbidden under scope."
                     )
             else:
                 v = self.safety_guard.classify(command)
                 if v and v.is_dangerous and not self.scope.allow_destructive:
+                    lbl = getattr(v, "label", getattr(v, "risk_level", "destructive"))
                     raise ScopeViolationError(
-                        f"Command '{command}' is classified as DESTRUCTIVE ({v.risk_level}) and is forbidden under scope."
+                        f"Command '{command}' is classified as DESTRUCTIVE ({lbl}) and is forbidden under scope."
                     )
 
     # =========================================================================

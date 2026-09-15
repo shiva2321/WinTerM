@@ -127,12 +127,21 @@ class WindowsShellExecutor:
         # Auto-diagnose if failed
         healing_proposal: Optional[SelfHealingProposal] = None
         if not success and auto_diagnose:
-            healing_proposal = WindowsErrorCatalog.diagnose(
-                stderr=stderr_str,
-                stdout=stdout_str,
-                exit_code=exit_code,
-                failed_command=command,
-            )
+            if target_shell in (ShellType.WSL_BASH, ShellType.BASH):
+                from winterm.knowledge.linux_errors import LinuxErrorCatalog
+                healing_proposal = LinuxErrorCatalog.diagnose(
+                    stdout=stdout_str,
+                    stderr=stderr_str,
+                    exit_code=exit_code,
+                    failed_command=command,
+                )
+            else:
+                healing_proposal = WindowsErrorCatalog.diagnose(
+                    stderr=stderr_str,
+                    stdout=stdout_str,
+                    exit_code=exit_code,
+                    failed_command=command,
+                )
 
         return ExecutionResult(
             step_id=step_id,

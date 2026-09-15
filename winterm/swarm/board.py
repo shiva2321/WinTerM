@@ -108,6 +108,17 @@ class SwarmMessageBoard:
             required_privilege=required_privilege,
         )
         with self._lock:
+            # Enforce retention quota on suggestions ledger
+            if len(self._suggestions) >= self.MAX_SUGGESTIONS_DEFAULT:
+                # Prefer evicting non-pending suggestions first
+                non_pending = [sid for sid, s in self._suggestions.items() if s.status != SuggestionStatus.PENDING]
+                if non_pending:
+                    del self._suggestions[non_pending[0]]
+                else:
+                    # Evict oldest entry
+                    first_key = next(iter(self._suggestions))
+                    del self._suggestions[first_key]
+
             self._suggestions[suggestion.suggestion_id] = suggestion
             # Also notify board
             self.post_message(
