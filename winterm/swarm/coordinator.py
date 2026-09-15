@@ -184,6 +184,22 @@ class SwarmCoordinator:
             resolution_note=reason,
         )
 
+    def review_suggestion(
+        self,
+        suggestion_id: str,
+        action: str = "approve",
+        feedback: str = "",
+        execute_now: bool = False,
+    ) -> Dict[str, Any]:
+        """Reviews a suggestion with 'approve' or 'reject' action, mirroring the MCP tool pattern."""
+        if str(action).lower() == "approve":
+            note = feedback or "Approved by main agent."
+            return self.approve_suggestion(suggestion_id=suggestion_id, execute_now=execute_now, resolution_note=note)
+        else:
+            note = feedback or "Rejected by main agent."
+            rejected = self.reject_suggestion(suggestion_id=suggestion_id, reason=note)
+            return {"approved": False, "rejected": rejected, "suggestion_id": suggestion_id}
+
     # =========================================================================
     # 4. SWARM TELEMETRY & STATUS
     # =========================================================================
@@ -193,14 +209,22 @@ class SwarmCoordinator:
         with self._lock:
             agents_telemetry = [a.get_telemetry().model_dump() for a in self._subagents.values()]
             pending_suggestions = [s.model_dump() for s in self.board.get_pending_suggestions()]
+            all_suggestions = self.board.list_suggestions()
             fault_records = [f.model_dump() for f in self.board.get_fault_records()[-10:]]
+            isolated_count = len([
+                a for a in self._subagents.values()
+                if a.status == SubAgentStatus.ISOLATED or a.sandbox.circuit_breaker.is_isolated
+            ])
 
             return {
                 "active_agents_count": len(self._subagents),
+                "max_capacity": self.MAX_SUBAGENTS_CAP,
                 "agents": agents_telemetry,
                 "pending_suggestions_count": len(pending_suggestions),
+                "total_suggestions_count": len(all_suggestions),
                 "pending_suggestions": pending_suggestions,
                 "recent_faults_count": len(fault_records),
+                "isolated_agents_count": isolated_count,
                 "recent_faults": fault_records,
             }
 

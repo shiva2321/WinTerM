@@ -136,18 +136,20 @@ class SubAgentWorker:
     def propose_suggestion(
         self,
         title: str,
-        reasoning: str,
-        proposed_action: str,
+        reasoning: str = "",
+        proposed_action: str = "",
         target_shell: ShellType = ShellType.POWERSHELL_51,
         required_privilege: AgentPrivilege = AgentPrivilege.TERMINAL_EXECUTOR,
+        rationale: Optional[str] = None,
     ) -> SwarmSuggestion:
         """Proactively formulates a recommendation for main agent oversight."""
         self.last_heartbeat = time.time()
+        effective_reasoning = reasoning or rationale or ""
         return self.board.submit_suggestion(
             proposing_agent_id=self.agent_id,
             proposing_agent_name=self.name,
             title=title,
-            reasoning=reasoning,
+            reasoning=effective_reasoning,
             proposed_action=proposed_action,
             target_shell=target_shell,
             required_privilege=required_privilege,
