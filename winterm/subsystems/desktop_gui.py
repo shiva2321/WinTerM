@@ -10,6 +10,11 @@ from winterm.interaction.app_manager import WindowsAppManager
 from winterm.interaction.window_manager import WindowManager
 from winterm.interaction.ui_automation import UIAutomationEngine
 from winterm.interaction.screen import ScreenPerceptionEngine
+from winterm.interaction.ocr_engine import WindowsOCREngine
+from winterm.interaction.visual_grounding import SetOfMarkEngine
+from winterm.interaction.semantic_tree import SemanticAccessibilityTree
+from winterm.interaction.smart_resolver import SmartUIResolver
+from winterm.interaction.visual_diff import VisualStateVerifier
 
 
 class DesktopGuiSubsystem:
@@ -574,3 +579,108 @@ class DesktopGuiSubsystem:
     @classmethod
     def plan_draw_shape(cls, shape: str, **kwargs) -> List[PlanStep]:
         return [cls.draw_geometric_shape(shape, **kwargs)]
+
+    # =========================================================================
+    # 7. ADVANCED UI PERCEPTION & GROUNDING
+    # =========================================================================
+
+    @classmethod
+    def ocr_window(cls, window_identifier: str, language_tag: str = "en-US") -> PlanStep:
+        """Executes native zero-dependency Windows OCR on the target window's graphical rendering."""
+        return PlanStep(
+            step_id=f"gui-ocr-window-{window_identifier.replace(' ', '_')}",
+            title=f"Native Windows OCR on Window '{window_identifier}'",
+            category=ActionCategory.CUSTOM,
+            raw_intent=f"ocr window {window_identifier}",
+            target_shell=ShellType.POWERSHELL_51,
+            command=WindowsOCREngine.build_ocr_window_command(window_identifier, language_tag=language_tag),
+            metadata={"subsystem": "desktop_gui", "action": "ocr_window", "window": window_identifier, "lang": language_tag},
+        )
+
+    @classmethod
+    def ocr_image(cls, image_path: str, language_tag: str = "en-US") -> PlanStep:
+        """Executes native zero-dependency Windows OCR on an image file on disk."""
+        return PlanStep(
+            step_id=f"gui-ocr-image",
+            title=f"Native Windows OCR on Image '{image_path}'",
+            category=ActionCategory.CUSTOM,
+            raw_intent=f"ocr image {image_path}",
+            target_shell=ShellType.POWERSHELL_51,
+            command=WindowsOCREngine.build_ocr_image_command(image_path, language_tag=language_tag),
+            metadata={"subsystem": "desktop_gui", "action": "ocr_image", "path": image_path, "lang": language_tag},
+        )
+
+    @classmethod
+    def som_annotate(cls, window_identifier: str, output_annotated_path: str, max_marks: int = 50) -> PlanStep:
+        """Generates Set-of-Mark visual grounding overlay with numbered badges ([1], [2]...) and element index."""
+        return PlanStep(
+            step_id=f"gui-som-annotate-{window_identifier.replace(' ', '_')}",
+            title=f"Set-of-Mark Grounding on Window '{window_identifier}' -> '{output_annotated_path}'",
+            category=ActionCategory.CUSTOM,
+            raw_intent=f"set of mark annotate {window_identifier}",
+            target_shell=ShellType.POWERSHELL_51,
+            command=SetOfMarkEngine.build_annotate_window_command(window_identifier, output_annotated_path, max_marks=max_marks),
+            metadata={"subsystem": "desktop_gui", "action": "som_annotate", "window": window_identifier, "output": output_annotated_path},
+        )
+
+    @classmethod
+    def smart_click(
+        cls,
+        window_identifier: str,
+        element_query: str,
+        control_type: Optional[str] = None,
+        language_tag: str = "en-US",
+    ) -> PlanStep:
+        """Clicks an element using multi-strategy cascading: UIAutomation -> Native OCR -> Coordinate click."""
+        return PlanStep(
+            step_id=f"gui-smart-click-{element_query.replace(' ', '_')}",
+            title=f"Smart Click '{element_query}' in Window '{window_identifier}' (UIA + OCR Fallback)",
+            category=ActionCategory.CUSTOM,
+            raw_intent=f"smart click {element_query} in {window_identifier}",
+            target_shell=ShellType.POWERSHELL_51,
+            command=SmartUIResolver.build_smart_click_command(
+                window_identifier,
+                element_query,
+                control_type=control_type,
+                language_tag=language_tag,
+            ),
+            metadata={"subsystem": "desktop_gui", "action": "smart_click", "window": window_identifier, "query": element_query},
+        )
+
+    @classmethod
+    def wait_for_ui_change(
+        cls,
+        window_identifier: str,
+        timeout_ms: int = 3000,
+        min_diff_pct: float = 0.5,
+    ) -> PlanStep:
+        """Waits asynchronously for visual UI change in the target window, eliminating race conditions."""
+        return PlanStep(
+            step_id=f"gui-wait-change-{window_identifier.replace(' ', '_')}",
+            title=f"Wait for Visual UI Change in '{window_identifier}' (Timeout: {timeout_ms}ms, Threshold: {min_diff_pct}%)",
+            category=ActionCategory.CUSTOM,
+            raw_intent=f"wait for ui change in {window_identifier}",
+            target_shell=ShellType.POWERSHELL_51,
+            command=VisualStateVerifier.build_wait_for_ui_change_command(
+                window_identifier,
+                timeout_ms=timeout_ms,
+                min_diff_pct=min_diff_pct,
+            ),
+            metadata={"subsystem": "desktop_gui", "action": "wait_ui_change", "window": window_identifier, "timeout_ms": timeout_ms},
+        )
+
+    @classmethod
+    def plan_ocr_window(cls, window_identifier: str, language_tag: str = "en-US") -> List[PlanStep]:
+        return [cls.ocr_window(window_identifier, language_tag=language_tag)]
+
+    @classmethod
+    def plan_som_annotate(cls, window_identifier: str, output_annotated_path: str, max_marks: int = 50) -> List[PlanStep]:
+        return [cls.som_annotate(window_identifier, output_annotated_path, max_marks=max_marks)]
+
+    @classmethod
+    def plan_smart_click(cls, window_identifier: str, element_query: str, control_type: Optional[str] = None) -> List[PlanStep]:
+        return [cls.smart_click(window_identifier, element_query, control_type=control_type)]
+
+    @classmethod
+    def plan_wait_for_ui_change(cls, window_identifier: str, timeout_ms: int = 3000, min_diff_pct: float = 0.5) -> List[PlanStep]:
+        return [cls.wait_for_ui_change(window_identifier, timeout_ms=timeout_ms, min_diff_pct=min_diff_pct)]

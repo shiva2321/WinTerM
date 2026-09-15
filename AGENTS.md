@@ -10,13 +10,14 @@ WinTerM equips AI agents with deterministic Windows Terminal and Linux/WSL2 mast
 ---
 
 ## Tool Availability
-When executing actions, use the **46 MCP tools** provided by WinTerM (`python -m winterm.tools.mcp_server`):
+When executing actions, use the **51 MCP tools** provided by WinTerM (`python -m winterm.tools.mcp_server`):
 - **Core 5W Pipeline**: `plan_terminal_task`, `explain_terminal_command`, `predict_command_impact`, `execute_terminal_command`, `diagnose_terminal_error`, `undo_last_terminal_action`.
 - **Linux & WSL2 Subsystem**: `winterm_linux_execute`, `winterm_linux_path_convert`, `winterm_linux_distro_list`, `winterm_linux_safety_check`, `winterm_linux_diagnose_error`.
 - **Knowledge Graph**: `winterm_graph_blast_radius`, `winterm_graph_validate_command`, `winterm_graph_remedy_error`, `winterm_graph_alternatives`, `winterm_graph_command_docs`, `winterm_graph_safety_check`.
 - **Application Lifecycle**: `winterm_app_find`, `winterm_app_launch`, `winterm_app_close`, `winterm_app_learn`.
 - **Window Management**: `winterm_window_list`, `winterm_window_focus`, `winterm_window_resize`, `winterm_window_close`.
 - **UI Automation & Input**: `winterm_ui_inspect`, `winterm_ui_click`, `winterm_ui_set_text`, `winterm_input_type`, `winterm_input_hotkey`, `winterm_input_mouse_click`, `winterm_input_mouse_drag`, `winterm_screen_state`, `winterm_screen_capture`.
+- **Advanced UI Perception & Grounding**: `winterm_ui_perceive`, `winterm_ui_ocr`, `winterm_ui_som_annotate`, `winterm_ui_smart_click`, `winterm_ui_wait_change`.
 - **Playbooks & Reusable Scripts**: `winterm_playbook_create`, `winterm_playbook_match_run`, `winterm_playbook_list`, `winterm_playbook_prune`.
 - **Multi-Agent Swarm Subsystem**: `winterm_swarm_dispatch`, `winterm_swarm_board_read`, `winterm_swarm_board_post`, `winterm_swarm_suggestions`, `winterm_swarm_status`.
 

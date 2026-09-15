@@ -395,6 +395,56 @@ def winterm_screen_capture(output_path: str, window_query: Optional[str] = None)
     return {"exit_code": exec_res.exit_code, "output": exec_res.stdout, "error": exec_res.stderr}
 
 
+def winterm_ui_perceive(window_identifier: str, max_items: int = 50, include_ocr: bool = True) -> Dict[str, Any]:
+    """Generates a complete semantic UI perception map including compact Markdown tree, OCR text blocks, and coordinates.
+    
+    CRITICAL AGENT INSTRUCTION:
+    Use this tool instead of raw JSON inspection to observe active desktop applications with maximum token efficiency.
+    """
+    res = _agent_instance.perceive_ui(window_identifier, max_items=max_items, include_ocr=include_ocr)
+    return {"exit_code": 0, "output": json.dumps(res, default=str), "error": ""}
+
+
+def winterm_ui_ocr(window_identifier: str, language_tag: str = "en-US") -> Dict[str, Any]:
+    """Executes native zero-dependency Windows OCR on the target window's graphical rendering.
+    
+    CRITICAL AGENT INSTRUCTION:
+    Use this tool to read text, buttons, and links in Canvas, Electron, Flutter, or game windows that lack UI Automation trees.
+    """
+    exec_res, _, _ = _agent_instance.ocr_window(window_identifier, language_tag=language_tag)
+    return {"exit_code": exec_res.exit_code, "output": exec_res.stdout, "error": exec_res.stderr}
+
+
+def winterm_ui_som_annotate(window_identifier: str, output_annotated_path: str, max_marks: int = 50) -> Dict[str, Any]:
+    """Generates Set-of-Mark (SoM) visual grounding annotations with high-contrast numbered badges ([1], [2]...).
+    
+    CRITICAL AGENT INSTRUCTION:
+    Use this tool to produce visual annotated screenshots for multimodal reasoning models (Gemini, Claude, GPT-4o).
+    """
+    exec_res, _, _ = _agent_instance.som_annotate(window_identifier, output_annotated_path, max_marks=max_marks)
+    return {"exit_code": exec_res.exit_code, "output": exec_res.stdout, "error": exec_res.stderr}
+
+
+def winterm_ui_smart_click(window_identifier: str, element_query: str, control_type: Optional[str] = None) -> Dict[str, Any]:
+    """Clicks an element using multi-strategy cascading: UIAutomation -> Native Windows OCR -> Coordinate click.
+    
+    CRITICAL AGENT INSTRUCTION:
+    Use this tool to reliably click buttons or controls even when the application renders custom UI or uses dynamic IDs.
+    """
+    exec_res, _, _ = _agent_instance.smart_click(window_identifier, element_query, control_type=control_type)
+    return {"exit_code": exec_res.exit_code, "output": exec_res.stdout, "error": exec_res.stderr}
+
+
+def winterm_ui_wait_change(window_identifier: str, timeout_ms: int = 3000, min_diff_pct: float = 0.5) -> Dict[str, Any]:
+    """Waits asynchronously for visual UI change in the target window, eliminating race conditions.
+    
+    CRITICAL AGENT INSTRUCTION:
+    Call this tool immediately after clicking a button or submitting a form to ensure the UI state transition has completed.
+    """
+    exec_res, _, _ = _agent_instance.wait_for_ui_change(window_identifier, timeout_ms=timeout_ms, min_diff_pct=min_diff_pct)
+    return {"exit_code": exec_res.exit_code, "output": exec_res.stdout, "error": exec_res.stderr}
+
+
 def winterm_linux_execute(
     command: str,
     distro: Optional[str] = None,
@@ -1450,6 +1500,85 @@ EXPORTED_TOOLS_SCHEMA = [
             "parameters": {
                 "type": "object",
                 "properties": {},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "winterm_ui_perceive",
+            "description": "Generates a complete semantic UI perception map including compact Markdown tree, OCR text blocks, and coordinates.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "window_identifier": {"type": "string", "description": "Window title substring or numeric window handle (HWND)."},
+                    "max_items": {"type": "integer", "default": 50, "description": "Maximum number of interactive elements to retain."},
+                    "include_ocr": {"type": "boolean", "default": True, "description": "Whether to include native Windows OCR text recognition."},
+                },
+                "required": ["window_identifier"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "winterm_ui_ocr",
+            "description": "Executes native zero-dependency Windows OCR on the target window's graphical rendering.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "window_identifier": {"type": "string", "description": "Window title substring or numeric window handle (HWND)."},
+                    "language_tag": {"type": "string", "default": "en-US", "description": "BCP-47 language tag (e.g. 'en-US')."},
+                },
+                "required": ["window_identifier"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "winterm_ui_som_annotate",
+            "description": "Generates Set-of-Mark (SoM) visual grounding annotations with high-contrast numbered badges ([1], [2]...).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "window_identifier": {"type": "string", "description": "Window title substring or numeric window handle (HWND)."},
+                    "output_annotated_path": {"type": "string", "description": "Absolute destination path for the annotated PNG image."},
+                    "max_marks": {"type": "integer", "default": 50, "description": "Maximum number of marked element tags to overlay."},
+                },
+                "required": ["window_identifier", "output_annotated_path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "winterm_ui_smart_click",
+            "description": "Clicks an element using multi-strategy cascading: UIAutomation -> Native Windows OCR -> Coordinate click.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "window_identifier": {"type": "string", "description": "Window title substring or numeric window handle (HWND)."},
+                    "element_query": {"type": "string", "description": "Name, label, text, or AutomationId of the element to click."},
+                    "control_type": {"type": "string", "description": "Optional ControlType constraint (e.g. 'Button', 'MenuItem')."},
+                },
+                "required": ["window_identifier", "element_query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "winterm_ui_wait_change",
+            "description": "Waits asynchronously for visual UI change in the target window, eliminating race conditions.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "window_identifier": {"type": "string", "description": "Window title substring or numeric window handle (HWND)."},
+                    "timeout_ms": {"type": "integer", "default": 3000, "description": "Maximum time to wait for state transition in milliseconds."},
+                    "min_diff_pct": {"type": "number", "default": 0.5, "description": "Minimum percentage visual difference to consider changed."},
+                },
+                "required": ["window_identifier"],
             },
         },
     },

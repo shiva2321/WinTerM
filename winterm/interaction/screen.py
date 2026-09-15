@@ -21,6 +21,11 @@ class ScreenPerceptionEngine:
         "public class InteractiveScreenState {\n"
         "    public int ScreenWidth;\n"
         "    public int ScreenHeight;\n"
+        "    public int VirtualLeft;\n"
+        "    public int VirtualTop;\n"
+        "    public int VirtualWidth;\n"
+        "    public int VirtualHeight;\n"
+        "    public int MonitorCount;\n"
         "    public int CursorX;\n"
         "    public int CursorY;\n"
         "    public long ForegroundHandle;\n"
@@ -43,6 +48,7 @@ class ScreenPerceptionEngine:
         "    [DllImport(\"user32.dll\", SetLastError = true)]\n"
         "    public static extern bool SetThreadDesktop(IntPtr hDesktop);\n"
         "    [DllImport(\"user32.dll\")] public static extern bool SetProcessDPIAware();\n"
+        "    [DllImport(\"user32.dll\")] public static extern bool SetProcessDpiAwarenessContext(IntPtr dpiContext);\n"
         "    [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow();\n"
         "    [DllImport(\"user32.dll\")] public static extern bool GetCursorPos(out POINT lpPoint);\n"
         "    [DllImport(\"user32.dll\", CharSet = CharSet.Auto, SetLastError = true)]\n"
@@ -62,7 +68,11 @@ class ScreenPerceptionEngine:
         "    public static void RunOnDefaultDesktop(Action act) {\n"
         "        var t = new Thread(() => {\n"
         "            try {\n"
-        "                SetProcessDPIAware();\n"
+        "                try {\n"
+        "                    SetProcessDpiAwarenessContext(new IntPtr(-4)); // DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2\n"
+        "                } catch {\n"
+        "                    SetProcessDPIAware();\n"
+        "                }\n"
         "                IntPtr dDesk = OpenDesktop(\"Default\", 0, false, 0x01FF);\n"
         "                if (dDesk == IntPtr.Zero) dDesk = OpenDesktop(\"default\", 0, false, 0x01FF);\n"
         "                if (dDesk != IntPtr.Zero) SetThreadDesktop(dDesk);\n"
@@ -79,6 +89,11 @@ class ScreenPerceptionEngine:
         "        RunOnDefaultDesktop(() => {\n"
         "            state.ScreenWidth = GetSystemMetrics(0);\n"
         "            state.ScreenHeight = GetSystemMetrics(1);\n"
+        "            state.VirtualLeft = GetSystemMetrics(76);\n"
+        "            state.VirtualTop = GetSystemMetrics(77);\n"
+        "            state.VirtualWidth = GetSystemMetrics(78);\n"
+        "            state.VirtualHeight = GetSystemMetrics(79);\n"
+        "            state.MonitorCount = GetSystemMetrics(80);\n"
         "            POINT pt;\n"
         "            GetCursorPos(out pt);\n"
         "            state.CursorX = pt.X;\n"
@@ -179,6 +194,13 @@ class ScreenPerceptionEngine:
             "    Success = $True;\n"
             "    ScreenWidth = $s.ScreenWidth;\n"
             "    ScreenHeight = $s.ScreenHeight;\n"
+            "    VirtualDesktop = @{\n"
+            "        Left = $s.VirtualLeft;\n"
+            "        Top = $s.VirtualTop;\n"
+            "        Width = $s.VirtualWidth;\n"
+            "        Height = $s.VirtualHeight;\n"
+            "        MonitorCount = $s.MonitorCount;\n"
+            "    };\n"
             "    CursorX = $s.CursorX;\n"
             "    CursorY = $s.CursorY;\n"
             "    ForegroundWindow = @{\n"
@@ -193,6 +215,40 @@ class ScreenPerceptionEngine:
             "} | ConvertTo-Json -Compress -Depth 3"
         )
         return script
+
+    @staticmethod
+    def normalize_to_window(
+        screen_x: int,
+        screen_y: int,
+        window_left: int,
+        window_top: int,
+        window_width: int,
+        window_height: int,
+    ) -> Dict[str, float]:
+        """Calculates resolution-independent normalized coordinates (0.0 to 1.0) inside window bounds."""
+        w = max(1, window_width)
+        h = max(1, window_height)
+        rel_x = screen_x - window_left
+        rel_y = screen_y - window_top
+        u = max(0.0, min(1.0, rel_x / float(w)))
+        v = max(0.0, min(1.0, rel_y / float(h)))
+        return {"u": round(u, 4), "v": round(v, 4), "rel_x": rel_x, "rel_y": rel_y}
+
+    @staticmethod
+    def denormalize_from_window(
+        u: float,
+        v: float,
+        window_left: int,
+        window_top: int,
+        window_width: int,
+        window_height: int,
+    ) -> Dict[str, int]:
+        """Converts normalized (u, v) coordinates back to physical global screen coordinates."""
+        clamped_u = max(0.0, min(1.0, float(u)))
+        clamped_v = max(0.0, min(1.0, float(v)))
+        screen_x = int(window_left + (clamped_u * window_width))
+        screen_y = int(window_top + (clamped_v * window_height))
+        return {"screen_x": screen_x, "screen_y": screen_y}
 
     @classmethod
     def build_find_element_command(cls, window_identifier: str, query: str) -> str:

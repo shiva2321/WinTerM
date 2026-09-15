@@ -34,6 +34,7 @@ class WindowsShellExecutor:
         # Build full executable command arguments
         shell_bin = ShellMatrix.get_shell_binary(target_shell)
 
+        temp_script_path = None
         if target_shell in (ShellType.POWERSHELL_51, ShellType.POWERSHELL_7):
             # Prepend UTF-8 output encoding preamble
             preamble = EncodingExpert.get_encoding_preamble()
@@ -41,7 +42,16 @@ class WindowsShellExecutor:
             sanitized_cmd = ReliabilityRules.make_non_interactive(command)
             formatted_cmd = ReliabilityRules.format_executable_invocation(sanitized_cmd, target_shell)
             script_body = f"{preamble} {formatted_cmd}"
-            cmd_args = ShellMatrix.build_command_args(target_shell, script_body)
+            # Windows command line limit is 8191 / 32767 chars. If script exceeds 4000 characters,
+            # write it to a temporary .ps1 script file and execute via -File to avoid [WinError 206]
+            if len(script_body) > 4000:
+                import tempfile
+                with tempfile.NamedTemporaryFile(mode="w", suffix=".ps1", encoding="utf-8-sig", delete=False) as tf:
+                    tf.write(script_body)
+                    temp_script_path = tf.name
+                cmd_args = [shell_bin, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", temp_script_path]
+            else:
+                cmd_args = ShellMatrix.build_command_args(target_shell, script_body)
         elif target_shell == ShellType.CMD:
             sanitized_cmd = ReliabilityRules.make_non_interactive(command)
             cmd_args = ShellMatrix.build_command_args(target_shell, sanitized_cmd)
@@ -105,6 +115,12 @@ class WindowsShellExecutor:
         except Exception as ex:
             exit_code = -1
             raw_stderr = f"Subprocess invocation failure: {str(ex)}".encode("utf-8")
+        finally:
+            if temp_script_path:
+                try:
+                    os.remove(temp_script_path)
+                except Exception:
+                    pass
 
         duration_ms = int((time.perf_counter() - start_time) * 1000)
 

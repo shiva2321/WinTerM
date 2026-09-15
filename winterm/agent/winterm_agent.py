@@ -22,6 +22,7 @@ from winterm.cognition.app_learner import AppLearner
 from winterm.playbooks.manager import PlaybookManager
 from winterm.playbooks.models import Playbook, PlaybookMatchResult
 from winterm.subsystems.desktop_gui import DesktopGuiSubsystem
+from winterm.interaction.semantic_tree import SemanticAccessibilityTree
 from winterm.graph.engine import WindowsKnowledgeGraph
 from winterm.graph.schema import BlastRadiusReport, RemediationPath, ParameterValidationResult
 from winterm.agent.session import AgentSession
@@ -432,6 +433,81 @@ class WinTermAgent:
     def learn_application(self, app_or_command: str) -> Dict[str, Any]:
         """Probes, analyzes, and learns how to operate any Windows application or CLI utility."""
         return self.learner.learn(app_or_command)
+
+    def ocr_window(self, window_identifier: str, language_tag: str = "en-US", dry_run: bool = False) -> Tuple[ExecutionResult, Optional[VerificationResult], DecisionTrace]:
+        """Executes native zero-dependency Windows OCR on the target window's graphical rendering."""
+        step = DesktopGuiSubsystem.ocr_window(window_identifier, language_tag=language_tag)
+        return self.execute_step(step, dry_run=dry_run)
+
+    def ocr_image(self, image_path: str, language_tag: str = "en-US", dry_run: bool = False) -> Tuple[ExecutionResult, Optional[VerificationResult], DecisionTrace]:
+        """Executes native zero-dependency Windows OCR on an image file on disk."""
+        step = DesktopGuiSubsystem.ocr_image(image_path, language_tag=language_tag)
+        return self.execute_step(step, dry_run=dry_run)
+
+    def som_annotate(self, window_identifier: str, output_annotated_path: str, max_marks: int = 50, dry_run: bool = False) -> Tuple[ExecutionResult, Optional[VerificationResult], DecisionTrace]:
+        """Generates Set-of-Mark visual grounding overlay with numbered badges ([1], [2]...) and element index."""
+        step = DesktopGuiSubsystem.som_annotate(window_identifier, output_annotated_path, max_marks=max_marks)
+        return self.execute_step(step, dry_run=dry_run)
+
+    def smart_click(
+        self,
+        window_identifier: str,
+        element_query: str,
+        control_type: Optional[str] = None,
+        language_tag: str = "en-US",
+        dry_run: bool = False,
+    ) -> Tuple[ExecutionResult, Optional[VerificationResult], DecisionTrace]:
+        """Clicks an element using multi-strategy cascading: UIAutomation -> Native OCR -> Coordinate click."""
+        step = DesktopGuiSubsystem.smart_click(window_identifier, element_query, control_type=control_type, language_tag=language_tag)
+        return self.execute_step(step, dry_run=dry_run)
+
+    def wait_for_ui_change(
+        self,
+        window_identifier: str,
+        timeout_ms: int = 3000,
+        min_diff_pct: float = 0.5,
+        dry_run: bool = False,
+    ) -> Tuple[ExecutionResult, Optional[VerificationResult], DecisionTrace]:
+        """Waits asynchronously for visual UI change in the target window, eliminating race conditions."""
+        step = DesktopGuiSubsystem.wait_for_ui_change(window_identifier, timeout_ms=timeout_ms, min_diff_pct=min_diff_pct)
+        return self.execute_step(step, dry_run=dry_run)
+
+    def perceive_ui(
+        self,
+        window_identifier: str,
+        max_items: int = 50,
+        include_ocr: bool = True,
+        dry_run: bool = False,
+    ) -> Dict[str, Any]:
+        """Comprehensive perception returning token-efficient semantic Markdown tree, OCR text blocks, and window bounds."""
+        exec_res, _, _ = self.inspect_window_elements(window_identifier, max_items=max_items * 2, dry_run=dry_run)
+        parsed_tree = {}
+        if exec_res.stdout:
+            try:
+                raw_json = json.loads(exec_res.stdout)
+                parsed_tree = SemanticAccessibilityTree.to_token_efficient_summary(raw_json, max_items=max_items)
+            except Exception:
+                parsed_tree = {"raw": exec_res.stdout}
+
+        ocr_summary = None
+        if include_ocr and not dry_run:
+            ocr_res, _, _ = self.ocr_window(window_identifier)
+            if ocr_res.stdout:
+                try:
+                    ocr_data = json.loads(ocr_res.stdout)
+                    ocr_summary = {
+                        "words_count": ocr_data.get("WordsCount", 0),
+                        "text": ocr_data.get("Text", ""),
+                        "words": ocr_data.get("Words", [])[:max_items],
+                    }
+                except Exception:
+                    ocr_summary = {"raw": ocr_res.stdout}
+
+        return {
+            "window": window_identifier,
+            "accessibility_tree": parsed_tree,
+            "ocr": ocr_summary,
+        }
 
     # =========================================================================
     # REUSABLE TASK PLAYBOOK & SCRIPT GENERALIZATION HELPERS
