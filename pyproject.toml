@@ -7,7 +7,7 @@ name = "winterm"
 version = "0.4.0"
 description = "WinTerM: The AI Agent Toolkit for Windows Terminal, Desktop & Linux/WSL2. 5W Cognitive Model, 11-Layer Subsystems, 37 MCP Tools, DeepSeek/Gemini/Claude Support & Multi-Agent Coexistence."
 readme = "README.md"
-license = { text = "MIT" }
+license = { text = "Source-Available / Commercial Permission Required" }
 authors = [
     { name = "WinTerM AI Team", email = "agent@winterm.ai" }
 ]
@@ -29,7 +29,7 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Intended Audience :: System Administrators",
-    "License :: OSI Approved :: MIT License",
+    "License :: Free For Non-Commercial Use",
     "Operating System :: Microsoft :: Windows",
     "Operating System :: Microsoft :: Windows :: Windows 10",
     "Operating System :: Microsoft :: Windows :: Windows 11",

@@ -1,21 +1,69 @@
-MIT License
+WinTerM Source-Available & Commercial Restriction License
+Version 1.0 (2026)
 
-Copyright (c) 2026 WinTerm AI Team and Contributors
+Copyright (c) 2026 WinTerM Authors and Repository Owner (https://github.com/shiva2321/WinTerM)
+All Rights Reserved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+===============================================================================
+1. PURPOSE AND GRANT OF LICENSE
+===============================================================================
+Subject to the terms and restrictions of this License, the Licensor hereby 
+grants to you a perpetual, worldwide, non-exclusive, royalty-free license to 
+reproduce, prepare derivative works of, publicly display, publicly perform, 
+and distribute the software code, documentation, and associated assets 
+(the "Software") SOLELY for NON-COMMERCIAL PURPOSES.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+===============================================================================
+2. PERMITTED NON-COMMERCIAL USE
+===============================================================================
+You MAY freely download, inspect, run, modify, and build upon the Software 
+WITHOUT fee or explicit permission ONLY IF your use qualifies as:
+  a) Personal, individual hobbyist, or educational learning.
+  b) Non-profit academic and scientific research.
+  c) Evaluation, security auditing, and non-commercial benchmarking.
+  d) Contributions back to the public upstream open-source repository.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+===============================================================================
+3. COMMERCIAL, STARTUP, AND ENTERPRISE RESTRICTIONS
+===============================================================================
+YOU MAY NOT USE, INTEGRATE, DEPLOY, HOST, EMBED, DISTRIBUTE, OR SUB-LICENSE 
+THE SOFTWARE FOR ANY COMMERCIAL, FOR-PROFIT, STARTUP, OR ENTERPRISE PURPOSE 
+WITHOUT PRIOR EXPRESS WRITTEN PERMISSION AND A COMMERCIAL LICENSE GRANTED 
+DIRECTLY BY THE COPYRIGHT OWNER.
+
+Strictly prohibited without written permission from the copyright owner:
+  a) Use by or within any for-profit corporation, company, partnership, 
+     venture-funded startup, sole proprietorship, or business entity.
+  b) Use to support, enhance, automate, or operate internal commercial operations, 
+     business workflows, product development, or revenue-generating services.
+  c) Offering the Software as a hosted service, managed service, cloud platform, 
+     application programming interface (API), or Software-as-a-Service (SaaS).
+  d) Bundling, redistributing, or embedding the Software into commercial products, 
+     proprietary applications, or paid consulting offerings.
+
+===============================================================================
+4. COMMERCIAL INQUIRIES & PERMISSION REQUESTS
+===============================================================================
+To request commercial usage rights, enterprise deployment licenses, custom 
+exemptions, or commercial partnerships, contact the author and repository owner:
+  - Repository Owner: shiva2321 (https://github.com/shiva2321)
+  - Official Inquiries: Open a confidential inquiry via GitHub Discussions or 
+    reach out via repository contact channels.
+
+===============================================================================
+5. REDISTRIBUTION & NOTICE PRESERVATION
+===============================================================================
+All copies, forks, substantial portions, or derivative works of the Software 
+must retain this entire License text, the original copyright notice, and 
+clear attribution to the original repository (https://github.com/shiva2321/WinTerM).
+
+===============================================================================
+6. DISCLAIMER OF WARRANTY AND LIMITATION OF LIABILITY
+===============================================================================
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR 
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
+FITNESS FOR A PARTICULAR PURPOSE, TITLE, AND NON-INFRINGEMENT. IN NO EVENT 
+SHALL THE AUTHORS, COPYRIGHT HOLDERS, OR CONTRIBUTORS BE LIABLE FOR ANY CLAIM, 
+DAMAGES, OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR 
+OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE 
+USE OR OTHER DEALINGS IN THE SOFTWARE.

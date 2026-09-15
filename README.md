@@ -4,7 +4,7 @@
 [![Windows](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011%20%7C%20Server-0078D6?logo=windows)](https://microsoft.com)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python)](https://python.org)
 [![Tests](https://img.shields.io/badge/Tests-149%2F149%20Passing-brightgreen?logo=pytest)](https://github.com/shiva2321/WinTerM/actions)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-Source--Available%20%7C%20Commercial%20Permission%20Required-red.svg)](LICENSE)
 [![Model Context Protocol](https://img.shields.io/badge/MCP-46%20Tools%20%2B%20Prompts-FF6B6B)](https://modelcontextprotocol.io)
 [![Gemini Ready](https://img.shields.io/badge/Gemini-Native%20Support-8E75B2?logo=google)](GEMINI.md)
 [![DeepSeek Ready](https://img.shields.io/badge/DeepSeek-R1%20CoT%20Aligned-007AFF?logo=deepseek)](DEEPSEEK.md)
@@ -592,9 +592,16 @@ All **149 out of 149 automated tests (100%)** pass cleanly across all 11 archite
 
 ---
 
-## License 📄
+## License & Commercial Rights 📄
 
-WinTerM is distributed under the permissive [MIT License](LICENSE). Free for personal, research, startup, and enterprise commercial use.
+WinTerM is distributed under the **Source-Available & Commercial Restriction License** (see [`LICENSE`](LICENSE)).
 
+### Permitted Free Use
+- ✅ **Personal & Hobbyist Use**: Free for individual developers, exploration, and learning.
+- ✅ **Academic & Research**: Free for non-profit educational and scientific research.
+- ✅ **Evaluation & Auditing**: Free for security audits, testing, and benchmark evaluation.
+- ✅ **Open-Source Contributions**: Free for community bug fixes and public PRs.
 
-
+### Commercial, Startup & Enterprise Restriction
+- ⛔ **Commercial, Startup & Enterprise Usage Strictly Restricted**: For-profit businesses, startups, corporations, and enterprise entities MAY NOT use, embed, bundle, run in production, or offer WinTerM as a commercial service without express written permission and a commercial license granted directly by the author.
+- 📬 **Commercial Inquiries & Permission**: To request a commercial usage grant, enterprise license, or partnership, contact the author directly via [GitHub Profile](https://github.com/shiva2321) or open a commercial permission request on [GitHub Discussions](https://github.com/shiva2321/WinTerM/discussions).
