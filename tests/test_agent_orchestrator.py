@@ -150,8 +150,18 @@ def test_agent_rollback_stack():
     assert res.success is True
     assert len(agent.session.rollback_stack) >= 1
 
-    # Undo
+    # The rollback for "created a directory" is a recursive force-delete --
+    # high-risk by construction. undo_last_action() must gate it exactly like
+    # every other execution path: refuse without confirm_high_risk, and leave
+    # it on the stack so a confirmed retry can still find it.
     undo_res = agent.undo_last_action()
+    assert undo_res is not None
+    assert undo_res.success is False
+    assert "SAFETY GATE" in undo_res.stderr
+    assert len(agent.session.rollback_stack) >= 1
+
+    # Confirmed: proceeds and pops the stack.
+    undo_res = agent.undo_last_action(confirm_high_risk=True)
     assert undo_res is not None
     assert undo_res.success is True
     assert len(agent.session.rollback_stack) == 0
