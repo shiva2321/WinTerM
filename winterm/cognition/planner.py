@@ -70,8 +70,8 @@ class TerminalPlanner:
             )
 
         # 2. Kill process by name: e.g. "kill chrome" or "stop process node"
-        elif any(lower_goal.startswith(w) for w in ["kill process", "stop process", "terminate process"]):
-            proc_name = re.sub(r'^(?:kill|stop|terminate)\s+process\s+', '', goal_clean, flags=re.IGNORECASE).strip().rstrip(".exe")
+        elif re.match(r'^(?:kill|stop|terminate)\s+(?:process\s+)?[a-zA-Z0-9_\-\.]+\s*$', lower_goal) and "service" not in lower_goal:
+            proc_name = re.sub(r'\.exe$', '', re.sub(r'^(?:kill|stop|terminate)\s+(?:process\s+)?', '', goal_clean, flags=re.IGNORECASE)).strip()
             steps.append(
                 PlanStep(
                     step_id="step-1",
@@ -155,7 +155,7 @@ class TerminalPlanner:
             )
 
         # --- LAYER 0: KERNEL & BOOT ---
-        elif any(w in lower_goal for w in ["bcd", "boot config", "bootloader"]):
+        elif re.search(r'\bbcd\b', lower_goal) or "boot config" in lower_goal or "bootloader" in lower_goal:
             requires_admin = True
             steps.append(KernelBootSubsystem.query_boot_configuration())
         elif any(w in lower_goal for w in ["power schemes", "power plans", "powercfg"]):
@@ -275,48 +275,48 @@ class TerminalPlanner:
 
         # --- LAYER 9: DESKTOP GUI & INPUT AUTOMATION ---
         elif any(w in lower_goal for w in ["find app", "search app", "find application", "list apps"]):
-            app_q_m = re.search(r'(?:find|search|list)\s+(?:app|apps|application|applications)\s*(.*)', lower_goal)
+            app_q_m = re.search(r'(?:find|search|list)\s+(?:app|apps|application|applications)\s*(.*)', goal_clean, re.IGNORECASE)
             app_q = app_q_m.group(1).strip() if app_q_m and app_q_m.group(1).strip() else None
             steps.append(DesktopGuiSubsystem.find_applications(query=app_q))
         elif any(lower_goal.startswith(w) for w in ["launch app", "open app", "start app", "launch application", "open application"]):
-            app_t_m = re.search(r'(?:launch|open|start)\s+(?:app|application)\s+([^\s]+)', lower_goal)
+            app_t_m = re.search(r'(?:launch|open|start)\s+(?:app|application)\s+([^\s]+)', goal_clean, re.IGNORECASE)
             target = app_t_m.group(1).strip() if app_t_m else "notepad.exe"
             steps.append(DesktopGuiSubsystem.launch_application(target=target))
         elif any(lower_goal.startswith(w) for w in ["close app", "kill app", "stop app", "close application"]):
-            app_c_m = re.search(r'(?:close|kill|stop)\s+(?:app|application)\s+([^\s]+)', lower_goal)
+            app_c_m = re.search(r'(?:close|kill|stop)\s+(?:app|application)\s+([^\s]+)', goal_clean, re.IGNORECASE)
             target = app_c_m.group(1).strip() if app_c_m else "notepad"
             steps.append(DesktopGuiSubsystem.close_application(target=target))
         elif any(w in lower_goal for w in ["list windows", "show windows", "get windows"]):
             steps.append(DesktopGuiSubsystem.list_windows())
         elif any(w in lower_goal for w in ["focus window", "foreground window", "activate window"]):
-            proc_m = re.search(r'(?:focus|foreground|activate)\s+(?:window\s+)?([a-zA-Z0-9_\-\.\s]+)', lower_goal)
+            proc_m = re.search(r'(?:focus|foreground|activate)\s+(?:window\s+)?([a-zA-Z0-9_\-\.\s]+)', goal_clean, re.IGNORECASE)
             p_name = proc_m.group(1).strip() if proc_m else "notepad"
             steps.append(DesktopGuiSubsystem.focus_window(p_name))
         elif any(w in lower_goal for w in ["resize window", "move window"]):
-            res_m = re.search(r'(?:resize|move)\s+(?:window\s+)?([a-zA-Z0-9_\-\.]+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)', lower_goal)
+            res_m = re.search(r'(?:resize|move)\s+(?:window\s+)?([a-zA-Z0-9_\-\.]+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)', goal_clean, re.IGNORECASE)
             if res_m:
                 steps.append(DesktopGuiSubsystem.resize_move_window(res_m.group(1), int(res_m.group(2)), int(res_m.group(3)), int(res_m.group(4)), int(res_m.group(5))))
             else:
                 steps.append(DesktopGuiSubsystem.resize_move_window("Notepad", 100, 100, 800, 600))
         elif any(w in lower_goal for w in ["inspect ui", "inspect elements", "inspect window"]):
-            insp_m = re.search(r'(?:inspect\s+(?:ui|elements|controls|window)\s+(?:in\s+)?)([a-zA-Z0-9_\-\.\s]+)', lower_goal)
+            insp_m = re.search(r'(?:inspect\s+(?:ui|elements|controls|window)\s+(?:in\s+)?)([a-zA-Z0-9_\-\.\s]+)', goal_clean, re.IGNORECASE)
             w_name = insp_m.group(1).strip() if insp_m else "Notepad"
             steps.append(DesktopGuiSubsystem.inspect_ui_elements(w_name))
         elif any(w in lower_goal for w in ["click element", "click button", "click control"]):
-            clk_m = re.search(r'click\s+(?:element|button|control)\s+([^\s]+)\s+(?:in\s+)?([^\s]+)', lower_goal)
+            clk_m = re.search(r'click\s+(?:element|button|control)\s+([^\s]+)\s+(?:in\s+)?([^\s]+)', goal_clean, re.IGNORECASE)
             if clk_m:
                 steps.append(DesktopGuiSubsystem.click_ui_element(window_identifier=clk_m.group(2), element_query=clk_m.group(1)))
             else:
                 steps.append(DesktopGuiSubsystem.click_ui_element(window_identifier="Notepad", element_query="Submit"))
         elif any(w in lower_goal for w in ["type text", "type into", "type string"]):
-            txt_m = re.search(r'type\s+(?:text|into|string)\s*(.*)', lower_goal)
+            txt_m = re.search(r'type\s+(?:text|into|string)\s*(.*)', goal_clean, re.IGNORECASE)
             txt_val = txt_m.group(1).strip() if txt_m and txt_m.group(1).strip() else "Hello Windows"
             steps.append(DesktopGuiSubsystem.type_text(txt_val))
         elif any(w in lower_goal for w in ["press hotkey", "send hotkey", "keyboard shortcut", "press windows", "press win", "press key", "press keys", "show desktop", "minimize all windows"]):
             if "show desktop" in lower_goal or "minimize all" in lower_goal:
                 parsed_keys = ["win", "d"]
             else:
-                hk_m = re.search(r'(?:hotkey|shortcut|press|send)\s+(?:the\s+)?([a-zA-Z0-9_\-\+\s]+?)(?:\s+key|\s+keys)?$', lower_goal)
+                hk_m = re.search(r'(?:hotkey|shortcut|press|send)\s+(?:the\s+)?([a-zA-Z0-9_\-\+\s]+?)(?:\s+key|\s+keys)?$', goal_clean, re.IGNORECASE)
                 raw_keys = hk_m.group(1).strip() if hk_m else "ctrl+c"
                 parsed_keys = [k.strip() for k in re.split(r'[\+\s]+', raw_keys) if k.strip()]
             steps.append(DesktopGuiSubsystem.press_hotkey(parsed_keys))

@@ -25,6 +25,15 @@ class PlaybookManager:
     RECURRENCE_THRESHOLD: int = 2
     MAX_PLAYBOOKS_CAP: int = 50
 
+    @staticmethod
+    def _script_extension(shell: ShellType) -> str:
+        """Single source of truth for the on-disk script extension per shell."""
+        if shell in (ShellType.POWERSHELL_51, ShellType.POWERSHELL_7):
+            return ".ps1"
+        if shell in (ShellType.WSL_BASH, ShellType.BASH):
+            return ".sh"
+        return ".cmd"
+
     def __init__(self, storage_dir: Optional[str] = None, executor: Optional[WindowsShellExecutor] = None):
         if storage_dir:
             self.storage_dir = Path(storage_dir)
@@ -79,6 +88,9 @@ class PlaybookManager:
             candidate.last_seen = time.time()
             if candidate.commands != commands and commands:
                 candidate.commands = commands
+                # Recompute parameters so the promoted script body and its
+                # parameter list always correspond to the same commands.
+                _, params = ScriptGeneralizer.extract_signature_and_params(goal, candidate.commands)
 
             # Promote if hit threshold
             if auto_promote and candidate.hit_count >= self.RECURRENCE_THRESHOLD:
@@ -186,6 +198,7 @@ class PlaybookManager:
         playbook_id: str,
         parameters: Optional[Dict[str, Any]] = None,
         background: bool = False,
+        confirm_high_risk: bool = False,
     ) -> ExecutionResult:
         """Executes a generalized playbook with supplied or extracted parameters."""
         if playbook_id not in self._playbooks:
@@ -199,7 +212,24 @@ class PlaybookManager:
             )
 
         playbook = self._playbooks[playbook_id]
-        params = parameters or {}
+
+        # Safety gate: a playbook whose commands were classified destructive may
+        # not run without explicit confirmation.
+        if playbook.safety_tier == "destructive" and not confirm_high_risk:
+            return ExecutionResult(
+                step_id=f"exec-{playbook_id}",
+                command=f"Playbook '{playbook_id}'",
+                shell=playbook.target_shell,
+                success=False,
+                exit_code=-100,
+                stderr=(
+                    "[SAFETY GATE] Playbook contains destructive commands and was refused. "
+                    "Re-run with confirm_high_risk=True to execute explicitly."
+                ),
+            )
+
+        # Copy the caller's dict so filling defaults never mutates their object.
+        params = dict(parameters or {})
 
         # Fill in default parameter values if omitted
         for p in playbook.parameters:
@@ -207,9 +237,7 @@ class PlaybookManager:
                 params[p.name] = p.default_value
 
         # Build execution command
-        script_path = self.storage_dir / f"{playbook.playbook_id}.ps1" if playbook.target_shell in (
-            ShellType.POWERSHELL_51, ShellType.POWERSHELL_7
-        ) else self.storage_dir / f"{playbook.playbook_id}.sh"
+        script_path = self.storage_dir / f"{playbook.playbook_id}{self._script_extension(playbook.target_shell)}"
 
         if not script_path.exists():
             self._persist_playbook_file(playbook)
@@ -218,6 +246,8 @@ class PlaybookManager:
             sanitized_args = []
             for k, v in params.items():
                 safe_key = "".join(c for c in str(k) if c.isalnum() or c == "_")
+                if not safe_key:
+                    continue
                 safe_val = str(v).replace("'", "''")
                 sanitized_args.append(f"-{safe_key.capitalize()} '{safe_val}'")
             arg_str = " ".join(sanitized_args)
@@ -230,9 +260,23 @@ class PlaybookManager:
             arg_str = " ".join(sanitized_args)
             exec_command = f"bash '{str(script_path)}' {arg_str}".strip()
         else:
+            # cmd.exe has no reliable quote-doubling escape; reject values that
+            # contain command metacharacters rather than risk injection.
             sanitized_args = []
             for v in params.values():
-                safe_val = str(v).replace('"', '""')
+                safe_val = str(v)
+                if any(ch in safe_val for ch in '"&|<>^%\r\n'):
+                    return ExecutionResult(
+                        step_id=f"exec-{playbook_id}",
+                        command=f"Playbook '{playbook_id}'",
+                        shell=playbook.target_shell,
+                        success=False,
+                        exit_code=-100,
+                        stderr=(
+                            "[PARAMETER REJECTED] A parameter value contains characters "
+                            "unsafe for cmd.exe argument passing (\" & | < > ^ %)."
+                        ),
+                    )
                 sanitized_args.append(f'"{safe_val}"')
             arg_str = " ".join(sanitized_args)
             exec_command = f'cmd.exe /c "{str(script_path)}" {arg_str}'.strip()
@@ -245,6 +289,7 @@ class PlaybookManager:
             command=exec_command,
             shell=playbook.target_shell,
             timeout_seconds=60,
+            background=background,
         )
 
         if res.success:
@@ -296,9 +341,7 @@ class PlaybookManager:
 
     def _persist_playbook_file(self, playbook: Playbook) -> None:
         """Writes the standalone script file to the playbook storage directory."""
-        ext = ".ps1" if playbook.target_shell in (ShellType.POWERSHELL_51, ShellType.POWERSHELL_7) else (
-            ".sh" if playbook.target_shell in (ShellType.WSL_BASH, ShellType.BASH) else ".cmd"
-        )
+        ext = self._script_extension(playbook.target_shell)
         script_file = self.storage_dir / f"{playbook.playbook_id}{ext}"
         try:
             with open(script_file, "w", encoding="utf-8") as f:
@@ -317,14 +360,30 @@ class PlaybookManager:
             pass
 
     def _load_playbooks(self) -> None:
-        """Loads existing playbooks from the storage directory index."""
+        """Loads existing playbooks from the storage directory index.
+
+        Each entry is validated independently so a single malformed record does
+        not discard the entire catalog.
+        """
         index_file = self.storage_dir / "playbooks.json"
         if not index_file.exists():
             return
         try:
             with open(index_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                for pb_id, pb_dict in data.items():
-                    self._playbooks[pb_id] = Playbook.model_validate(pb_dict)
         except Exception:
-            pass
+            import logging
+            logging.getLogger("winterm.playbooks").warning(
+                "Could not read playbook index at %s; starting with an empty catalog.", index_file
+            )
+            return
+        if not isinstance(data, dict):
+            return
+        for pb_id, pb_dict in data.items():
+            try:
+                self._playbooks[pb_id] = Playbook.model_validate(pb_dict)
+            except Exception:
+                import logging
+                logging.getLogger("winterm.playbooks").warning(
+                    "Skipped corrupt playbook record '%s' in index.", pb_id
+                )

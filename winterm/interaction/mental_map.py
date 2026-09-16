@@ -199,6 +199,45 @@ class ScreenMentalMap:
         return SemanticRole.UNKNOWN
 
     @classmethod
+    def _normalize_window(cls, win: Dict[str, Any]) -> Dict[str, Any]:
+        """Normalizes a raw window record into the internal ``{handle,title,state,bounds}`` shape."""
+        hwnd = win.get("Handle") or win.get("handle")
+        title = win.get("Title") or win.get("title") or ""
+        state = win.get("State") or win.get("state") or "Normal"
+        bounds = win.get("Bounds") or win.get("bounds") or {}
+
+        w_dict = {"x": 0, "y": 0, "width": 1920, "height": 1080}
+        if isinstance(bounds, dict):
+            w_dict.update(bounds)
+        elif isinstance(bounds, str) and "(" in bounds:
+            match = re.search(r'(-?\d+),\s*(-?\d+)\s*\((-?\d+)x(-?\d+)\)', bounds)
+            if match:
+                w_dict = {
+                    "x": int(match.group(1)),
+                    "y": int(match.group(2)),
+                    "width": int(match.group(3)),
+                    "height": int(match.group(4)),
+                }
+        return {"handle": hwnd, "title": title, "state": state, "bounds": w_dict}
+
+    @staticmethod
+    def _coerce_ocr_lines(ocr_lines: Any) -> List[str]:
+        """Accepts either plain strings or WinRT OCR dicts and returns clean strings."""
+        if not ocr_lines:
+            return []
+        if isinstance(ocr_lines, dict):
+            ocr_lines = ocr_lines.get("Lines") or ocr_lines.get("lines") or []
+        normalized: List[str] = []
+        for line in ocr_lines:
+            if isinstance(line, str):
+                normalized.append(line)
+            elif isinstance(line, dict):
+                text = line.get("Text") or line.get("text") or ""
+                if text:
+                    normalized.append(str(text))
+        return normalized
+
+    @classmethod
     def build_from_perceptions(
         cls,
         windows: List[Dict[str, Any]],
@@ -207,37 +246,27 @@ class ScreenMentalMap:
         ocr_lines: Optional[List[str]] = None,
     ) -> "ScreenMentalMap":
         """Builds a multi-layered screen mental map from windows, UIAutomation, and OCR data."""
+        # Accept the full inspect result dict as well as a bare element list.
+        if isinstance(uia_elements, dict):
+            uia_elements = (
+                uia_elements.get("Elements")
+                or uia_elements.get("elements")
+                or uia_elements.get("Items")
+                or []
+            )
+        clean_ocr_lines = cls._coerce_ocr_lines(ocr_lines)
+
         active_win = None
         inactive_wins = []
         modals = []
 
         # 1. Partition Windows into Active, Inactive, and Modals
         for win in windows:
-            hwnd = win.get("Handle") or win.get("handle")
-            title = win.get("Title") or win.get("title") or ""
-            state = win.get("State") or win.get("state") or "Normal"
-            bounds = win.get("Bounds") or win.get("bounds") or {}
-
-            # Parse bounds string if needed (e.g. "120,6 (3234x1845)")
-            w_dict = {"x": 0, "y": 0, "width": 1920, "height": 1080}
-            if isinstance(bounds, dict):
-                w_dict.update(bounds)
-            elif isinstance(bounds, str) and "(" in bounds:
-                match = re.search(r'(-?\d+),\s*(-?\d+)\s*\((-?\d+)x(-?\d+)\)', bounds)
-                if match:
-                    w_dict = {
-                        "x": int(match.group(1)),
-                        "y": int(match.group(2)),
-                        "width": int(match.group(3)),
-                        "height": int(match.group(4)),
-                    }
-
-            win_summary = {
-                "handle": hwnd,
-                "title": title,
-                "state": state,
-                "bounds": w_dict,
-            }
+            win_summary = cls._normalize_window(win)
+            title = win_summary["title"]
+            state = win_summary["state"]
+            hwnd = win_summary["handle"]
+            w_dict = win_summary["bounds"]
 
             # Check if modal/dialog
             if any(m in title.lower() for m in ["dialog", "run", "confirm", "alert", "error", "open file", "save as"]):
@@ -251,10 +280,12 @@ class ScreenMentalMap:
                 inactive_wins.append(win_summary)
 
         if not active_win and windows:
-            active_win = windows[0]
+            active_win = cls._normalize_window(windows[0])
 
         win_w = active_win.get("bounds", {}).get("width", 1920) if active_win else 1920
         win_h = active_win.get("bounds", {}).get("height", 1080) if active_win else 1080
+        win_x = active_win.get("bounds", {}).get("x", 0) if active_win else 0
+        win_y = active_win.get("bounds", {}).get("y", 0) if active_win else 0
 
         # 2. Fuse Elements
         semantic_elements: List[SemanticUIElement] = []
@@ -263,20 +294,39 @@ class ScreenMentalMap:
         # A. Process UIAutomation Elements
         if uia_elements:
             for el in uia_elements:
+                if not isinstance(el, dict):
+                    continue
                 name = el.get("Name") or el.get("name") or ""
                 auto_id = el.get("AutomationId") or el.get("automation_id") or ""
                 c_type = el.get("ControlType") or el.get("control_type") or "Unknown"
                 text = name or auto_id
 
-                cx = el.get("CenterX") or el.get("center_x") or 0
-                cy = el.get("CenterY") or el.get("center_y") or 0
-                w = el.get("Width") or el.get("width") or 80
-                h = el.get("Height") or el.get("height") or 30
-                bx = cx - (w // 2)
-                by = cy - (h // 2)
+                # Prefer explicit center/size; fall back to a BoundingRectangle.
+                cx = el.get("CenterX") or el.get("center_x")
+                cy = el.get("CenterY") or el.get("center_y")
+                w = el.get("Width") or el.get("width")
+                h = el.get("Height") or el.get("height")
+                if cx is None or cy is None:
+                    rect = el.get("BoundingRectangle") or el.get("bounding_rectangle") or {}
+                    if isinstance(rect, dict):
+                        rx = rect.get("X", rect.get("Left", rect.get("x", 0)))
+                        ry = rect.get("Y", rect.get("Top", rect.get("y", 0)))
+                        rw = rect.get("Width", rect.get("width", 0))
+                        rh = rect.get("Height", rect.get("height", 0))
+                        cx = rx + (rw / 2)
+                        cy = ry + (rh / 2)
+                        w = w or rw
+                        h = h or rh
+                cx = cx or 0
+                cy = cy or 0
+                w = w or 80
+                h = h or 30
+                bx = int(cx - (w // 2))
+                by = int(cy - (h // 2))
 
-                bounds = {"x": bx, "y": by, "width": w, "height": h}
-                zone = cls.classify_zone(by, h, bx, w, win_w, win_h)
+                bounds = {"x": bx, "y": by, "width": int(w), "height": int(h)}
+                # Zone classification expects window-relative coordinates.
+                zone = cls.classify_zone(by - win_y, int(h), bx - win_x, int(w), win_w, win_h)
                 role = cls.infer_role(c_type, text, bounds)
 
                 semantic_elements.append(
@@ -286,8 +336,8 @@ class ScreenMentalMap:
                         text=text,
                         bounds=bounds,
                         zone=zone,
-                        is_enabled=el.get("IsEnabled", el.get("is_enabled", True)),
-                        is_focused=el.get("HasKeyboardFocus", el.get("is_focused", False)),
+                        is_enabled=bool(el.get("IsEnabled", el.get("is_enabled", True))),
+                        is_focused=bool(el.get("HasKeyboardFocus", el.get("is_focused", False))),
                         source="uia",
                         metadata={"automation_id": auto_id, "control_type": c_type},
                     )
@@ -295,9 +345,9 @@ class ScreenMentalMap:
                 elem_idx += 1
 
         # B. Process WinRT OCR Text Lines (Particularly critical for Class B Electron/Chromium apps)
-        if ocr_lines:
-            line_count = len(ocr_lines)
-            for i, line in enumerate(ocr_lines):
+        if clean_ocr_lines:
+            line_count = len(clean_ocr_lines)
+            for i, line in enumerate(clean_ocr_lines):
                 cleaned = line.strip()
                 if not cleaned or cleaned.startswith("+--") or cleaned.startswith("|--"):
                     continue

@@ -3,6 +3,7 @@
 from typing import Dict, Any, List, Optional
 from winterm.models.context import ShellType, ElevationLevel
 from winterm.models.intent import PlanStep, ActionCategory
+from winterm.knowledge.param_safety import ps_literal, safe_identifier, package_id as validate_package_id
 
 
 class VirtualizationPackagesSubsystem:
@@ -57,7 +58,9 @@ class VirtualizationPackagesSubsystem:
         """Queries Windows optional features (e.g. Hyper-V, Containers, TelnetClient, Sandbox)."""
         cmd = "Get-WindowsOptionalFeature -Online"
         if filter_name:
-            cmd += f" -FeatureName '*{filter_name}*'"
+            safe_filter = safe_identifier(filter_name, fallback="")
+            if safe_filter:
+                cmd += f" -FeatureName {ps_literal('*' + safe_filter + '*')}"
         cmd += " | Select-Object -Property FeatureName,State | ConvertTo-Json -Depth 5"
         return PlanStep(
             step_id="virt-features-query",
@@ -73,18 +76,19 @@ class VirtualizationPackagesSubsystem:
     @classmethod
     def winget_install(cls, package_id: str) -> PlanStep:
         """Installs software via Windows Package Manager (winget) silently with agreement acceptance."""
+        safe_pkg = validate_package_id(package_id)
         return PlanStep(
-            step_id=f"pkg-winget-install-{package_id.replace('.', '_')}",
-            title=f"Install Package via Winget: {package_id}",
+            step_id=f"pkg-winget-install-{safe_pkg.replace('.', '_')}",
+            title=f"Install Package via Winget: {safe_pkg}",
             category=ActionCategory.PACKAGE,
-            raw_intent=f"winget install {package_id}",
+            raw_intent=f"winget install {safe_pkg}",
             target_shell=ShellType.CMD,
             timeout_seconds=300,
             command=(
-                f"winget.exe install --exact --id {package_id} "
+                f"winget.exe install --exact --id {safe_pkg} "
                 "--accept-source-agreements --accept-package-agreements --disable-interactivity"
             ),
-            metadata={"subsystem": "packages", "package_id": package_id},
+            metadata={"subsystem": "packages", "package_id": safe_pkg},
         )
 
     @classmethod

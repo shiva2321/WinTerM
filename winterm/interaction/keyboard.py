@@ -88,6 +88,8 @@ class KeyboardEngine:
         "    public static extern IntPtr OpenDesktop(string lpszDesktop, uint dwFlags, bool fInherit, uint dwDesiredAccess);\n"
         "    [DllImport(\"user32.dll\", SetLastError = true)]\n"
         "    public static extern bool SetThreadDesktop(IntPtr hDesktop);\n"
+        "    [DllImport(\"user32.dll\", SetLastError = true)]\n"
+        "    public static extern bool CloseDesktop(IntPtr hDesktop);\n"
         "    [DllImport(\"user32.dll\")] public static extern bool SetProcessDPIAware();\n"
         "    [DllImport(\"user32.dll\")] public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, int dwExtraInfo);\n"
         "    [DllImport(\"user32.dll\", SetLastError = true)]\n"
@@ -95,13 +97,15 @@ class KeyboardEngine:
         "\n"
         "    public static void RunOnDefaultDesktop(Action act) {\n"
         "        var t = new System.Threading.Thread(() => {\n"
+        "            IntPtr dDesk = IntPtr.Zero;\n"
         "            try {\n"
         "                SetProcessDPIAware();\n"
-        "                IntPtr dDesk = OpenDesktop(\"Default\", 0, false, 0x01FF);\n"
+        "                dDesk = OpenDesktop(\"Default\", 0, false, 0x01FF);\n"
         "                if (dDesk == IntPtr.Zero) dDesk = OpenDesktop(\"default\", 0, false, 0x01FF);\n"
         "                if (dDesk != IntPtr.Zero) SetThreadDesktop(dDesk);\n"
         "            } catch {}\n"
-        "            act();\n"
+        "            try { act(); }\n"
+        "            finally { if (dDesk != IntPtr.Zero) { try { CloseDesktop(dDesk); } catch {} } }\n"
         "        });\n"
         "        t.SetApartmentState(System.Threading.ApartmentState.STA);\n"
         "        t.Start();\n"
@@ -279,6 +283,7 @@ class KeyboardEngine:
 
         return (
             f"{cls.WIN32_KBD_HEADER}"
+            "Add-Type -AssemblyName System.Windows.Forms -ErrorAction SilentlyContinue; "
             f"[System.Windows.Forms.SendKeys]::SendWait('{send_str}'); "
             "@{ Action = 'PressKey'; Key = '" + key + "'; Count = " + str(count) + "; Success = $True } | ConvertTo-Json -Compress"
         )
@@ -290,8 +295,10 @@ class KeyboardEngine:
         ps_escaped = text.replace("'", "''")
         return (
             f"{cls.WIN32_KBD_HEADER}"
-            # Send Ctrl+A then Backspace
-            "[Win32KbdCore]::SendHotkey(0x11, 0x41, $false, $false, $false, $false);\n"
+            # Send Ctrl+A then Backspace. SendHotkey's C# signature is
+            # (string mod, byte vk); the previous six-argument call could never
+            # bind and aborted the whole script.
+            "[Win32KbdCore]::SendHotkey('ctrl', 0x41);\n"
             "Start-Sleep -Milliseconds 60;\n"
             "[Win32KbdCore]::PressKey(0x08, 1);\n"
             "Start-Sleep -Milliseconds 60;\n"

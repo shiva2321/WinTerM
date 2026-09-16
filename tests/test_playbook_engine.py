@@ -198,6 +198,51 @@ class TestPlaybookManager:
             assert forced_pb is not None
             assert forced_pb.playbook_id in mgr._playbooks
 
+    def test_execute_playbook_refuses_destructive_tier_without_confirmation(self):
+        """Regression: execute_playbook() must check the safety_tier it computed
+        at creation time, not just record it and ignore it forever after.
+
+        Before this fix, a playbook created from a destructive command sequence
+        was correctly tagged safety_tier="destructive", but execute_playbook()
+        never read that field -- it went straight to the raw executor on every
+        replay, with no gate, no confirmation, ever again.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mgr = PlaybookManager(storage_dir=tmpdir)
+            pb = mgr.create_playbook_from_task(
+                goal="Clean up a directory",
+                commands=[
+                    "Test-Path -Path 'C:\\temp\\x'",
+                    "Remove-Item -Recurse -Force -Path 'C:\\temp\\x'",
+                ],
+                shell=ShellType.POWERSHELL_51,
+            )
+            assert pb.safety_tier == "destructive"
+
+            unconfirmed = mgr.execute_playbook(pb.playbook_id, confirm_high_risk=False)
+            assert unconfirmed.success is False
+            assert "SAFETY GATE" in unconfirmed.stderr
+            assert unconfirmed.exit_code == -100
+
+            # Default parameter value must also refuse.
+            default_call = mgr.execute_playbook(pb.playbook_id)
+            assert default_call.success is False
+            assert "SAFETY GATE" in default_call.stderr
+
+    def test_execute_playbook_allows_safe_tier_without_confirmation(self):
+        """A playbook recorded as safe must not require confirm_high_risk."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mgr = PlaybookManager(storage_dir=tmpdir)
+            pb = mgr.create_playbook_from_task(
+                goal="Check two things",
+                commands=["Get-Process", "Get-Service"],
+                shell=ShellType.POWERSHELL_51,
+            )
+            assert pb.safety_tier == "safe"
+            res = mgr.execute_playbook(pb.playbook_id, confirm_high_risk=False)
+            # Not gate-refused (may still fail/succeed on its own terms).
+            assert not (res.exit_code == -100 and "SAFETY GATE" in (res.stderr or ""))
+
     def test_lru_quota_pruning(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             mgr = PlaybookManager(storage_dir=tmpdir)

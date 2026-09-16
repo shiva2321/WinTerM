@@ -160,7 +160,9 @@ class WinTermAgent:
 
         # 5. Handle failure and auto-healing
         if not exec_res.success and auto_heal and exec_res.healing_proposal:
-            heal_res = self.healer.attempt_auto_heal(exec_res.healing_proposal)
+            heal_res = self.healer.attempt_auto_heal(
+                exec_res.healing_proposal, confirm_high_risk=confirm_high_risk
+            )
             if heal_res.success:
                 # Retry original command after healing
                 exec_res = self.executor.execute(
@@ -199,32 +201,23 @@ class WinTermAgent:
         """Blocks destructive / unconfirmed-elevation steps from executing.
 
         Returns an ExecutionResult refusal when the step must not run, or
-        ``None`` when execution may proceed.
+        ``None`` when execution may proceed. Delegates to
+        ``winterm.cognition.safety_gate.evaluate_gate_decision`` -- the single
+        source of truth for this decision, also used by every other execution
+        path (playbook replay, auto-heal, rollback) so none of them can
+        silently diverge from what execute_step enforces.
         """
-        from winterm.models.impact import RiskLevel
+        from winterm.cognition.safety_gate import evaluate_gate_decision
 
-        if impact.risk_level in (RiskLevel.HIGH_DESTRUCTIVE, RiskLevel.ELEVATION_REQUIRED):
-            if impact.risk_level == RiskLevel.ELEVATION_REQUIRED and step.required_elevation == ElevationLevel.ADMIN:
-                # Elevation requirement is already declared on the step; the
-                # UAC wrapper handles it at execution time.
-                return None
-
-            if not confirm_high_risk:
-                reasons = "; ".join(impact.warnings[:3]) if impact.warnings else "classified as high risk"
-                return ExecutionResult(
-                    step_id=step.step_id,
-                    command=step.command,
-                    shell=step.target_shell,
-                    success=False,
-                    exit_code=-100,
-                    stdout="",
-                    stderr=(
-                        f"[SAFETY GATE] Refused to execute: {reasons}\n"
-                        "This step was predicted to be high-risk/destructive. "
-                        "Re-run with confirm_high_risk=True to execute it explicitly."
-                    ),
-                )
-        return None
+        return evaluate_gate_decision(
+            risk_level=impact.risk_level,
+            warnings=impact.warnings,
+            required_elevation=step.required_elevation,
+            command=step.command,
+            shell=step.target_shell,
+            step_id=step.step_id,
+            confirm_high_risk=confirm_high_risk,
+        )
 
     def run_goal(
         self,
@@ -248,16 +241,40 @@ class WinTermAgent:
 
         return results
 
-    def undo_last_action(self) -> Optional[ExecutionResult]:
-        """Executes the most recent rollback action from the session undo stack."""
+    def undo_last_action(self, confirm_high_risk: bool = False) -> Optional[ExecutionResult]:
+        """Executes the most recent rollback action from the session undo stack.
+
+        Rollback commands are system-synthesized, not free-text agent input,
+        but they are frequently destructive by construction (the rollback for
+        "created a directory" is a recursive force-delete of that directory --
+        see ImpactPredictor's own rollback synthesis). Gated the same as every
+        other execution path: refuses a high-risk rollback unless
+        confirm_high_risk=True.
+        """
+        from winterm.cognition.safety_gate import gate_command
+
         rollback = self.session.pop_rollback()
         if not rollback:
             return None
 
+        step_id = f"rollback-{rollback.step_id}"
+        refusal = gate_command(
+            command=rollback.command,
+            shell=rollback.shell,
+            confirm_high_risk=confirm_high_risk,
+            step_id=step_id,
+            graph=self.knowledge_graph,
+        )
+        if refusal is not None:
+            # Put it back so a retry with confirm_high_risk=True doesn't lose
+            # the pending rollback action.
+            self.session.rollback_stack.append(rollback)
+            return refusal
+
         return self.executor.execute(
             command=rollback.command,
             shell=rollback.shell,
-            step_id=f"rollback-{rollback.step_id}",
+            step_id=step_id,
         )
 
     # =========================================================================
@@ -543,12 +560,14 @@ class WinTermAgent:
         playbook_id: str,
         parameters: Optional[Dict[str, Any]] = None,
         background: bool = False,
+        confirm_high_risk: bool = False,
     ) -> ExecutionResult:
         """Executes a generalized playbook routine with supplied or extracted parameters."""
         return self.playbooks.execute_playbook(
             playbook_id=playbook_id,
             parameters=parameters,
             background=background,
+            confirm_high_risk=confirm_high_risk,
         )
 
     def list_playbooks(self) -> List[Playbook]:
@@ -580,9 +599,13 @@ class WinTermAgent:
         """Queries pending proactive suggestions submitted by autonomous sub-agents."""
         return [s.model_dump() for s in self.swarm.review_suggestions()]
 
-    def approve_swarm_suggestion(self, suggestion_id: str, execute_now: bool = True) -> Dict[str, Any]:
+    def approve_swarm_suggestion(
+        self, suggestion_id: str, execute_now: bool = True, confirm_high_risk: bool = False
+    ) -> Dict[str, Any]:
         """Approves and optionally executes a sub-agent proactive suggestion."""
-        return self.swarm.approve_suggestion(suggestion_id=suggestion_id, execute_now=execute_now)
+        return self.swarm.approve_suggestion(
+            suggestion_id=suggestion_id, execute_now=execute_now, confirm_high_risk=confirm_high_risk
+        )
 
     def reject_swarm_suggestion(self, suggestion_id: str, reason: str = "") -> bool:
         """Rejects a sub-agent suggestion with an explanatory rationale."""

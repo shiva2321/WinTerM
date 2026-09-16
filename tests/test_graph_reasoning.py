@@ -201,6 +201,40 @@ def test_error_healer_graph_backed_diagnosis(agent):
     assert proposal.requires_elevation is True
 
 
+def test_auto_heal_refuses_destructive_healing_command_without_confirmation(agent):
+    """Regression: attempt_auto_heal() must gate its own healing_command, not
+    just the original failed step.
+
+    auto_heal defaults to True on execute_step/run_goal, so a healing proposal
+    executes automatically after most failures. Before this fix,
+    ErrorHealer.attempt_auto_heal() called the raw executor directly with no
+    safety check at all -- a destructive healing_command (e.g. one derived
+    from a knowledge-graph remediation chain that happens to involve deleting
+    something) would run unconfirmed even though the user never opted into
+    confirm_high_risk for anything.
+    """
+    from winterm.models.result import SelfHealingProposal
+    from winterm.models.context import ShellType as ST
+
+    destructive_proposal = SelfHealingProposal(
+        error_signature="test-heal",
+        root_cause="test",
+        remedy_explanation="test",
+        healing_command="Remove-Item -Recurse -Force C:\\Windows\\System32",
+        healing_shell=ST.POWERSHELL_51,
+        requires_elevation=False,
+    )
+
+    unconfirmed = agent.healer.attempt_auto_heal(destructive_proposal, confirm_high_risk=False)
+    assert unconfirmed.success is False
+    assert "SAFETY GATE" in unconfirmed.stderr
+
+    # Default parameter value must also refuse (mirrors execute_step's default).
+    default_call = agent.healer.attempt_auto_heal(destructive_proposal)
+    assert default_call.success is False
+    assert "SAFETY GATE" in default_call.stderr
+
+
 # =============================================================================
 # 5. HUGGING FACE DATASET GRAPH CAPABILITIES
 # =============================================================================

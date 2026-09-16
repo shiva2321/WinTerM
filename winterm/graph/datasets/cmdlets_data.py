@@ -366,4 +366,46 @@ CMDLETS_DATA: Dict[str, Dict[str, Any]] = {
         "outputs": "Microsoft.Dism.Commands.ImageFeature",
         "mutates_state": False,
     },
+
+    # --- FILESYSTEM ---
+    "Copy-Item": {
+        "subsystem": "StorageNTFS",
+        "description": "Copies an item from one location to another within a namespace.",
+        "requires_privilege": "StandardUser",
+        "parameters": [
+            "-Path", "-Destination", "-Recurse", "-Force", "-Filter", "-Include",
+            "-Exclude", "-Container", "-PassThru", "-Confirm", "-WhatIf", "-ErrorAction",
+        ],
+        "outputs": "None",
+        "mutates_state": True,
+        "mutates_entity": "FileSystemState",
+    },
+    "Remove-Item": {
+        "subsystem": "StorageNTFS",
+        "description": "Deletes one or more items (files, directories, registry keys) from a namespace.",
+        "requires_privilege": "StandardUser",
+        "parameters": [
+            "-Path", "-LiteralPath", "-Recurse", "-Force", "-Include", "-Exclude",
+            "-Filter", "-Confirm", "-WhatIf", "-ErrorAction",
+        ],
+        "outputs": "None",
+        "mutates_state": True,
+        "mutates_entity": "FileSystemState",
+    },
+    "Test-Path": {
+        "subsystem": "StorageNTFS",
+        "description": "Determines whether all elements of a path exist.",
+        "requires_privilege": "StandardUser",
+        "parameters": ["-Path", "-LiteralPath", "-PathType", "-IsValid", "-NewerThan", "-OlderThan", "-ErrorAction"],
+        "outputs": "System.Boolean",
+        "mutates_state": False,
+    },
+    "Get-Acl": {
+        "subsystem": "StorageNTFS",
+        "description": "Gets the security descriptor for a resource such as a file or registry key.",
+        "requires_privilege": "StandardUser",
+        "parameters": ["-Path", "-LiteralPath", "-InputObject", "-Audit", "-Filter", "-Include", "-ErrorAction"],
+        "outputs": "System.Security.AccessControl.FileSecurity",
+        "mutates_state": False,
+    },
 }

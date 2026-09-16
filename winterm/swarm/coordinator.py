@@ -22,6 +22,13 @@ from winterm.swarm.models import (
 )
 from winterm.swarm.board import SwarmMessageBoard
 from winterm.swarm.subagent import SubAgentWorker
+from winterm.knowledge.safety_guard import SafetyGuard
+from winterm.knowledge.linux_safety import LinuxSafetyGuard
+
+
+class SwarmCapacityError(RuntimeError):
+    """Raised when the swarm cannot accept another active sub-agent."""
+    pass
 
 
 class SwarmCoordinator:
@@ -38,6 +45,8 @@ class SwarmCoordinator:
         self.board = board or SwarmMessageBoard()
         self.executor = executor or WindowsShellExecutor()
         self._subagents: Dict[str, SubAgentWorker] = {}
+        self.safety_guard = SafetyGuard()
+        self.linux_safety_guard = LinuxSafetyGuard()
 
     # =========================================================================
     # 1. SUB-AGENT DISPATCHING & LIFECYCLE
@@ -50,15 +59,23 @@ class SwarmCoordinator:
         privilege: AgentPrivilege = AgentPrivilege.READ_ONLY_AUDIT,
         custom_scope: Optional[AgentScope] = None,
     ) -> SubAgentWorker:
-        """Dispatches an autonomous sub-agent with a deterministic capability scope."""
+        """Dispatches an autonomous sub-agent with a deterministic capability scope.
+
+        Raises :class:`SwarmCapacityError` when the active sub-agent cap is
+        reached and no completed/failed/isolated agents can be pruned.
+        """
         with self._lock:
-            # Enforce max active sub-agents quota
-            active_count = len([a for a in self._subagents.values() if a.status != SubAgentStatus.COMPLETED])
-            if active_count >= self.MAX_SUBAGENTS_CAP:
-                # Prune completed or idle agents to make room
-                for aid, a in list(self._subagents.items()):
-                    if a.status in (SubAgentStatus.COMPLETED, SubAgentStatus.FAILED, SubAgentStatus.ISOLATED):
-                        del self._subagents[aid]
+            # Prune terminal agents first so slots can be reused.
+            for aid, a in list(self._subagents.items()):
+                if a.status in (SubAgentStatus.COMPLETED, SubAgentStatus.FAILED, SubAgentStatus.ISOLATED):
+                    del self._subagents[aid]
+
+            # Enforce max active sub-agents quota (hard cap).
+            if len(self._subagents) >= self.MAX_SUBAGENTS_CAP:
+                raise SwarmCapacityError(
+                    f"Swarm at capacity ({self.MAX_SUBAGENTS_CAP} active sub-agents). "
+                    "Terminate or wait for existing agents before dispatching more."
+                )
 
             worker = SubAgentWorker(
                 name=name,
@@ -85,6 +102,7 @@ class SwarmCoordinator:
     def dispatch_swarm(self, tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Dispatches a fleet of sub-agents for multiple objectives."""
         dispatched = []
+        rejected = []
         for task in tasks:
             name = task.get("name", "Worker")
             goal = task.get("goal", "")
@@ -94,12 +112,18 @@ class SwarmCoordinator:
             except ValueError:
                 priv = AgentPrivilege.READ_ONLY_AUDIT
 
-            worker = self.dispatch_subagent(name=name, goal=goal, privilege=priv)
+            try:
+                worker = self.dispatch_subagent(name=name, goal=goal, privilege=priv)
+            except SwarmCapacityError as cap_err:
+                rejected.append({"name": name, "error": str(cap_err)})
+                continue
             dispatched.append(worker.get_telemetry().model_dump())
 
         return {
             "dispatched_count": len(dispatched),
+            "rejected_count": len(rejected),
             "agents": dispatched,
+            "rejected": rejected,
         }
 
     # =========================================================================
@@ -135,8 +159,15 @@ class SwarmCoordinator:
         suggestion_id: str,
         execute_now: bool = True,
         resolution_note: str = "Approved by main agent.",
+        confirm_high_risk: bool = False,
     ) -> Dict[str, Any]:
-        """Approves and optionally executes a sub-agent suggestion."""
+        """Approves and optionally executes a sub-agent suggestion.
+
+        Approved actions are re-validated through the deterministic safety
+        guards before execution. A destructive proposal is refused unless the
+        caller explicitly passes ``confirm_high_risk=True`` (the main agent is
+        the only authority allowed to make that decision).
+        """
         sug = self.board.get_suggestion(suggestion_id)
         if not sug:
             return {"approved": False, "error": f"Suggestion '{suggestion_id}' not found."}
@@ -149,7 +180,30 @@ class SwarmCoordinator:
 
         exec_res = None
         if execute_now:
-            # Main agent executes approved proposal with full capability
+            # Re-validate the proposed action before granting execution.
+            if sug.target_shell in (ShellType.WSL_BASH, ShellType.BASH):
+                verdict = self.linux_safety_guard.evaluate(sug.proposed_action)
+            else:
+                verdict = self.safety_guard.classify(sug.proposed_action)
+            if verdict is not None and verdict.is_dangerous and not confirm_high_risk:
+                self.board.update_suggestion_status(
+                    suggestion_id=suggestion_id,
+                    status=SuggestionStatus.REJECTED,
+                    resolution_note=(
+                        "Refused at execution: proposal classified as dangerous. "
+                        "Re-approve with confirm_high_risk=True to override."
+                    ),
+                )
+                return {
+                    "approved": False,
+                    "suggestion_id": suggestion_id,
+                    "executed": False,
+                    "error": (
+                        f"Proposed action classified as '{verdict.label}' and was refused. "
+                        "Pass confirm_high_risk=True to execute explicitly."
+                    ),
+                }
+
             exec_res = self.executor.execute(
                 command=sug.proposed_action,
                 shell=sug.target_shell,
@@ -190,11 +244,17 @@ class SwarmCoordinator:
         action: str = "approve",
         feedback: str = "",
         execute_now: bool = False,
+        confirm_high_risk: bool = False,
     ) -> Dict[str, Any]:
         """Reviews a suggestion with 'approve' or 'reject' action, mirroring the MCP tool pattern."""
         if str(action).lower() == "approve":
             note = feedback or "Approved by main agent."
-            return self.approve_suggestion(suggestion_id=suggestion_id, execute_now=execute_now, resolution_note=note)
+            return self.approve_suggestion(
+                suggestion_id=suggestion_id,
+                execute_now=execute_now,
+                resolution_note=note,
+                confirm_high_risk=confirm_high_risk,
+            )
         else:
             note = feedback or "Rejected by main agent."
             rejected = self.reject_suggestion(suggestion_id=suggestion_id, reason=note)

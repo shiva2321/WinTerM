@@ -43,6 +43,16 @@ class SemanticAccessibilityTree:
     }
 
     @classmethod
+    def _safe_int(cls, value: Any, default: int = 0) -> int:
+        """Best-effort int coercion that never raises on malformed input."""
+        try:
+            if value is None:
+                return default
+            return int(value)
+        except (TypeError, ValueError):
+            return default
+
+    @classmethod
     def prune_elements(
         cls,
         elements: List[Dict[str, Any]],
@@ -55,9 +65,11 @@ class SemanticAccessibilityTree:
         seen_coordinates = set()
 
         for el in elements:
+            if not isinstance(el, dict):
+                continue
             # 1. Dimension check
-            w = int(el.get("Width", 0) or 0)
-            h = int(el.get("Height", 0) or 0)
+            w = cls._safe_int(el.get("Width", 0) or 0)
+            h = cls._safe_int(el.get("Height", 0) or 0)
             if filter_invisible and (w < min_dimension or h < min_dimension):
                 continue
 

@@ -4,8 +4,12 @@ and contains flukes and unexpected OS exceptions to prevent swarm-wide crash cas
 
 from __future__ import annotations
 
+import re
+import logging
+import threading
 import time
 import traceback
+from collections import deque
 from typing import Dict, Any, Callable, Optional, Tuple
 from pydantic import BaseModel, Field
 
@@ -15,6 +19,47 @@ from winterm.knowledge.safety_guard import SafetyGuard
 from winterm.knowledge.linux_safety import LinuxSafetyGuard
 from winterm.swarm.models import AgentScope, AgentPrivilege, SwarmFaultRecord
 from winterm.swarm.board import SwarmMessageBoard
+
+logger = logging.getLogger("winterm.swarm.sandbox")
+
+# Verbs/cmdlets that mutate the filesystem. Used to enforce ``allow_file_write``
+# independently of the (untrusted) ``category`` reported by the caller.
+_WINDOWS_WRITE_PATTERNS = [
+    re.compile(r"\bout-file\b", re.IGNORECASE),
+    re.compile(r"\bset-content\b", re.IGNORECASE),
+    re.compile(r"\badd-content\b", re.IGNORECASE),
+    re.compile(r"\bclear-content\b", re.IGNORECASE),
+    re.compile(r"\bnew-item\b", re.IGNORECASE),
+    re.compile(r"\bnew-itemproperty\b", re.IGNORECASE),
+    re.compile(r"\bset-item\b", re.IGNORECASE),
+    re.compile(r"\bset-itemproperty\b", re.IGNORECASE),
+    re.compile(r"\bcopy-item\b", re.IGNORECASE),
+    re.compile(r"\bmove-item\b", re.IGNORECASE),
+    re.compile(r"\brename-item\b", re.IGNORECASE),
+    re.compile(r"\bremove-item\b", re.IGNORECASE),
+    re.compile(r"\bexport-csv\b", re.IGNORECASE),
+    re.compile(r"\bexport-clixml\b", re.IGNORECASE),
+    re.compile(r"\bset-acl\b", re.IGNORECASE),
+    re.compile(r"\bicacls\b", re.IGNORECASE),
+    re.compile(r"\btakeown\b", re.IGNORECASE),
+    re.compile(r"\breg\s+(add|delete|import|copy|save|restore)\b", re.IGNORECASE),
+    re.compile(r"\bmkdir\b", re.IGNORECASE),
+    re.compile(r"\bmd\b", re.IGNORECASE),
+    re.compile(r"\bcopy\b", re.IGNORECASE),
+    re.compile(r"\bmove\b", re.IGNORECASE),
+    re.compile(r"\bren\b", re.IGNORECASE),
+    re.compile(r"\btypenul\b", re.IGNORECASE),
+    # Redirection to a file (ignores benign fd duplications like 2>&1).
+    re.compile(r"(?<![0-9&])>(?!&)\s*[^\s&]"),
+]
+
+_POSIX_WRITE_PATTERNS = [
+    re.compile(r"\btee\b", re.IGNORECASE),
+    re.compile(r"\b(?:cp|mv|mkdir|touch|rm|dd|install|ln|chmod|chown)\b"),
+    re.compile(r"\bsed\s+-i\b"),
+    re.compile(r"\btruncate\b"),
+    re.compile(r"(?<![0-9&])>>?(?!&)\s*[^\s&]"),
+]
 
 
 class ScopeViolationError(PermissionError):
@@ -29,6 +74,11 @@ class StepLimitExceededError(RuntimeError):
 
 class CircuitBreakerTrippedError(RuntimeError):
     """Raised when an isolated sub-agent attempts execution while its circuit breaker is open."""
+    pass
+
+
+class RateLimitExceededError(RuntimeError):
+    """Raised when a sub-agent exceeds its configured per-minute action rate limit."""
     pass
 
 
@@ -51,37 +101,42 @@ class CircuitBreaker:
         self.consecutive_failures: int = 0
         self.is_isolated: bool = False
         self.last_failure_time: float = 0.0
+        self._lock = threading.Lock()
 
     def record_success(self) -> None:
         """Resets the consecutive failure counter upon a verified successful operation."""
-        self.consecutive_failures = 0
-        self.is_isolated = False
+        with self._lock:
+            self.consecutive_failures = 0
+            self.is_isolated = False
 
     def record_failure(self) -> bool:
         """Increments failure count and trips isolation if threshold is reached. Returns True if tripped."""
-        self.consecutive_failures += 1
-        self.last_failure_time = time.time()
-        if self.consecutive_failures >= self.failure_threshold:
-            self.is_isolated = True
-            return True
-        return False
+        with self._lock:
+            self.consecutive_failures += 1
+            self.last_failure_time = time.time()
+            if self.consecutive_failures >= self.failure_threshold:
+                self.is_isolated = True
+                return True
+            return False
 
     def check_state(self) -> None:
         """Verifies if the circuit breaker allows execution."""
-        if self.is_isolated:
-            # Check if cooldown has elapsed
-            if time.time() - self.last_failure_time > self.cooldown_seconds:
-                self.is_isolated = False
-                self.consecutive_failures = 0
-            else:
-                raise CircuitBreakerTrippedError(
-                    f"Circuit breaker is TRIPPED. Sub-agent is isolated due to {self.consecutive_failures} consecutive faults."
-                )
+        with self._lock:
+            if self.is_isolated:
+                # Check if cooldown has elapsed
+                if time.time() - self.last_failure_time > self.cooldown_seconds:
+                    self.is_isolated = False
+                    self.consecutive_failures = 0
+                else:
+                    raise CircuitBreakerTrippedError(
+                        f"Circuit breaker is TRIPPED. Sub-agent is isolated due to {self.consecutive_failures} consecutive faults."
+                    )
 
     def reset(self) -> None:
         """Manually resets the circuit breaker."""
-        self.consecutive_failures = 0
-        self.is_isolated = False
+        with self._lock:
+            self.consecutive_failures = 0
+            self.is_isolated = False
 
 
 class SubAgentSandbox:
@@ -104,10 +159,23 @@ class SubAgentSandbox:
         self.linux_safety_guard = linux_safety_guard or LinuxSafetyGuard()
         self.circuit_breaker = CircuitBreaker(failure_threshold=3, cooldown_seconds=60.0)
         self.steps_executed: int = 0
+        self._lock = threading.Lock()
+        self._action_times: deque = deque()
 
     # =========================================================================
     # LAYER 1: PRE-EXECUTION SCOPE & PRIVILEGE ENFORCEMENT
     # =========================================================================
+
+    @staticmethod
+    def _is_file_write_command(command: str, shell: ShellType) -> bool:
+        """Detects whether a command mutates filesystem/registry/disk state.
+
+        This is enforced *independently* of the caller-supplied ``category`` so a
+        READ_ONLY sub-agent cannot write files by mislabelling the action as a
+        diagnostic.
+        """
+        patterns = _POSIX_WRITE_PATTERNS if shell in (ShellType.WSL_BASH, ShellType.BASH) else _WINDOWS_WRITE_PATTERNS
+        return any(p.search(command) for p in patterns)
 
     def validate_action_scope(
         self,
@@ -137,10 +205,17 @@ class SubAgentSandbox:
                 f"Desktop GUI interaction is denied for agent '{self.agent_name}' with privilege '{self.scope.privilege.value}'."
             )
 
-        # 4. Destructive command prevention
+        # 4. Filesystem-write boundary (independent of the caller's category).
+        if command and not self.scope.allow_file_write and self._is_file_write_command(command, shell):
+            raise ScopeViolationError(
+                f"Filesystem/registry write detected in command '{command[:80]}' but agent "
+                f"'{self.agent_name}' (privilege '{self.scope.privilege.value}') is not authorized to mutate state."
+            )
+
+        # 5. Destructive command prevention
         if command:
             if shell in (ShellType.WSL_BASH, ShellType.BASH):
-                verdict = self.linux_safety_guard.classify(command)
+                verdict = self.linux_safety_guard.evaluate(command)
                 if verdict and verdict.is_dangerous and not self.scope.allow_destructive:
                     lbl = getattr(verdict, "label", getattr(verdict, "risk_level", "destructive"))
                     raise ScopeViolationError(
@@ -159,11 +234,24 @@ class SubAgentSandbox:
     # =========================================================================
 
     def increment_step(self) -> None:
-        """Enforces upper step limit fences to eliminate runaway loops."""
-        self.steps_executed += 1
-        if self.steps_executed > self.scope.max_steps:
+        """Enforces upper step limit and per-minute rate fences to eliminate runaway loops."""
+        with self._lock:
+            self.steps_executed += 1
+            executed = self.steps_executed
+            now = time.time()
+            # Drop timestamps older than 60 seconds
+            while self._action_times and now - self._action_times[0] > 60.0:
+                self._action_times.popleft()
+            self._action_times.append(now)
+            rate = len(self._action_times)
+
+        if executed > self.scope.max_steps:
             raise StepLimitExceededError(
                 f"Sub-agent '{self.agent_name}' exceeded maximum permitted execution quota ({self.scope.max_steps} steps)."
+            )
+        if self.scope.rate_limit_per_minute and rate > self.scope.rate_limit_per_minute:
+            raise RateLimitExceededError(
+                f"Sub-agent '{self.agent_name}' exceeded rate limit ({self.scope.rate_limit_per_minute} actions/minute)."
             )
 
     # =========================================================================
@@ -211,7 +299,7 @@ class SubAgentSandbox:
                 duration_ms=duration_ms,
             )
 
-        except (ScopeViolationError, StepLimitExceededError) as sec_err:
+        except (ScopeViolationError, StepLimitExceededError, RateLimitExceededError) as sec_err:
             # Security violations trigger immediate fault logging without crashing caller
             duration_ms = int((time.time() - start_time) * 1000)
             fault = None
@@ -237,6 +325,12 @@ class SubAgentSandbox:
             # Traps any unforeseen OS error, driver fault, or crash fluke
             duration_ms = int((time.time() - start_time) * 1000)
             tripped = self.circuit_breaker.record_failure()
+            # Keep the raw traceback in the local log only; never expose it via
+            # the message board / swarm status (information disclosure).
+            logger.warning(
+                "Sub-agent '%s' fluke during '%s': %s\n%s",
+                self.agent_name, action_name, exc, traceback.format_exc(),
+            )
             fault = None
             if self.board:
                 fault = self.board.record_fault(
@@ -246,7 +340,7 @@ class SubAgentSandbox:
                     error_message=str(exc),
                     attempted_action=action_name,
                     was_isolated=tripped,
-                    context={"traceback": traceback.format_exc()},
+                    context={"exception_type": exc.__class__.__name__},
                 )
 
             return SafeExecutionResult(

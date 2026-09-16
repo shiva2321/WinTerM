@@ -378,14 +378,19 @@ class DesktopGuiSubsystem:
 
     @classmethod
     def mouse_move(cls, x: int, y: int, smooth: bool = False, steps: int = 15) -> PlanStep:
-        """Moves mouse cursor to absolute (X, Y) coordinates."""
+        """Moves mouse cursor to absolute (X, Y) coordinates (optionally along a smooth Bezier path)."""
+        command = (
+            MouseEngine.build_move_smooth_from_current_command(x, y, steps=steps)
+            if smooth
+            else MouseEngine.build_move_command(x, y, smooth=smooth, steps=steps)
+        )
         return PlanStep(
             step_id=f"gui-mouse-move-{x}-{y}",
             title=f"Move Mouse to ({x}, {y})" + (" [Smooth]" if smooth else ""),
             category=ActionCategory.CUSTOM,
             raw_intent=f"move mouse to {x} {y}",
             target_shell=ShellType.POWERSHELL_51,
-            command=MouseEngine.build_move_command(x, y, smooth=smooth, steps=steps),
+            command=command,
             metadata={"subsystem": "desktop_gui", "action": "mouse_move", "x": x, "y": y},
         )
 
@@ -398,7 +403,7 @@ class DesktopGuiSubsystem:
             category=ActionCategory.CUSTOM,
             raw_intent=f"drag mouse from {start_x} {start_y} to {end_x} {end_y}",
             target_shell=ShellType.POWERSHELL_51,
-            command=MouseEngine.build_drag_command(start_x, start_y, end_x, end_y, steps=steps),
+            command=MouseEngine.build_drag_and_drop_command(start_x, start_y, end_x, end_y, steps=steps),
             metadata={"subsystem": "desktop_gui", "action": "mouse_drag", "start": (start_x, start_y), "end": (end_x, end_y)},
         )
 
@@ -479,7 +484,7 @@ class DesktopGuiSubsystem:
     @classmethod
     def generate_circle_graphic(
         cls,
-        output_path: str = "$env:TEMP\\winterm_circle.png",
+        output_path: str = "%TEMP%\\winterm_circle.png",
         radius: int = 150,
         center_x: int = 250,
         center_y: int = 250,
@@ -521,7 +526,7 @@ class DesktopGuiSubsystem:
         )
 
     @classmethod
-    def open_in_paint(cls, file_path: str = "$env:TEMP\\winterm_circle.png") -> PlanStep:
+    def open_in_paint(cls, file_path: str = "%TEMP%\\winterm_circle.png") -> PlanStep:
         """Opens an image file inside Microsoft Paint (mspaint.exe) or registered editor with fallback diagnosis."""
         return PlanStep(
             step_id="gui-open-paint",
@@ -575,7 +580,7 @@ class DesktopGuiSubsystem:
             "if (-not $p -and (Test-Path \"$env:LOCALAPPDATA\\Microsoft\\WindowsApps\\mspaint.exe\")) {\n"
             "    $p = Start-Process \"$env:LOCALAPPDATA\\Microsoft\\WindowsApps\\mspaint.exe\" -PassThru -ErrorAction SilentlyContinue\n"
             "}\n"
-            "if ($p) {\n"
+            "if ($p -and $p.MainWindowHandle -ne [IntPtr]::Zero) {\n"
             "    $p.WaitForInputIdle(3000) | Out-Null\n"
             "    Start-Sleep -Milliseconds 600\n"
             "    [Win32Mouse]::SetForegroundWindow($p.MainWindowHandle) | Out-Null\n"
@@ -812,15 +817,20 @@ class DesktopGuiSubsystem:
         viewport_center_y: int = 400,
     ) -> PlanStep:
         """Calibrates and dispatches mouse wheel ticks to center a target element in the viewport."""
+        clean_target = window_identifier.replace("'", "''")
+        window_ops = (
+            f"{WindowManager.WIN32_WINDOW_HELPER}"
+            "$foundTitle = ''; "
+            f"$hWnd = [Win32WindowCore]::ResolveWindow('{clean_target}', [ref]$foundTitle); "
+            "if ($hWnd -ne [IntPtr]::Zero) { [Win32WindowCore]::ForceForegroundVerified($hWnd) | Out-Null; }; "
+        )
         return PlanStep(
             step_id=f"gui-scroll-into-view-{window_identifier.replace(' ', '_')}",
             title=f"Scroll Into View in '{window_identifier}' (TargetY: {target_rel_y})",
             category=ActionCategory.CUSTOM,
             raw_intent=f"scroll into view {target_rel_y} in {window_identifier}",
             target_shell=ShellType.POWERSHELL_51,
-            command=f"$foundTitle = ''; $hWnd = [Win32WindowCore]::ResolveWindow('{window_identifier}', [ref]$foundTitle);\n" +
-                    f"if ($hWnd -ne [IntPtr]::Zero) {{ [Win32WindowCore]::ForceForegroundVerified($hWnd) | Out-Null }};\n" +
-                    MouseEngine.build_scroll_into_view_command(0, target_rel_y, viewport_center_y=viewport_center_y),
+            command=window_ops + MouseEngine.build_scroll_into_view_command(0, target_rel_y, viewport_center_y=viewport_center_y),
             metadata={"subsystem": "desktop_gui", "action": "scroll_into_view", "window": window_identifier, "target_y": target_rel_y},
         )
 

@@ -28,6 +28,7 @@ class PenTouchEngine:
         steps: int = 36,
     ) -> List[Tuple[int, int]]:
         """Calculates discrete coordinate points tracing a circle."""
+        steps = max(1, int(steps))
         points = []
         for i in range(steps + 1):
             theta = 2.0 * math.pi * (i / float(steps))
@@ -63,6 +64,7 @@ class PenTouchEngine:
         steps: int = 20,
     ) -> List[Tuple[int, int]]:
         """Calculates intermediate points along a straight line vector."""
+        steps = max(1, int(steps))
         points = []
         for i in range(steps + 1):
             t = i / float(steps)

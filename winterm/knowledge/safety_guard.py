@@ -48,7 +48,15 @@ PROTECTED_PATHS: List[re.Pattern] = [
     re.compile(r"C:\\program files \(x86\)(\\|$)", re.IGNORECASE),
     re.compile(r"C:\\programdata(\\|$)", re.IGNORECASE),
     re.compile(r"C:\\boot(\\|$)", re.IGNORECASE),
-    re.compile(r"(?<![a-zA-Z0-9_\\])C:\\(?![a-zA-Z0-9_\\])", re.IGNORECASE),  # partition root strictly
+    # Drive-agnostic variants (forward slashes, any drive letter, `\\?\` prefix)
+    re.compile(r"[A-Za-z]:[\\/]windows(?:[\\/]|$)", re.IGNORECASE),
+    re.compile(r"[A-Za-z]:[\\/]windows[\\/]system32(?:[\\/]|$)", re.IGNORECASE),
+    re.compile(r"[A-Za-z]:[\\/]program files(?: \(x86\))?(?:[\\/]|$)", re.IGNORECASE),
+    re.compile(r"[A-Za-z]:[\\/]programdata(?:[\\/]|$)", re.IGNORECASE),
+    re.compile(r"[A-Za-z]:[\\/]boot(?:[\\/]|$)", re.IGNORECASE),
+    re.compile(r"\\\\\?\\[A-Za-z]:", re.IGNORECASE),
+    # Partition root strictly: X:\ or X:/ with nothing following
+    re.compile(r"(?<![\w\\])(?:[A-Za-z]):[\\/](?![\w\\])", re.IGNORECASE),
     re.compile(r"\$env:windir", re.IGNORECASE),
     re.compile(r"\$env:systemroot", re.IGNORECASE),
     re.compile(r"\$env:programfiles", re.IGNORECASE),
@@ -77,10 +85,15 @@ DESTRUCTIVE_VERBS: List[re.Pattern] = [
     re.compile(r"\bformat-volume\b", re.IGNORECASE),
     re.compile(r"\bclear-recyclebin\b", re.IGNORECASE),
     re.compile(r"\bdiskpart\b", re.IGNORECASE),
-    re.compile(r"\bclean\b", re.IGNORECASE),                # diskpart clean
+    # diskpart "clean" only in diskpart context (avoids flagging `git clean -fd`,
+    # `apt-get clean`, `cargo clean`, etc.)
+    re.compile(r"\bdiskpart\b[\s\S]*?\bclean\b", re.IGNORECASE),
     re.compile(r"\bformat(\.com|\.exe)?\s+[a-z]:", re.IGNORECASE),
     re.compile(r"\bnew-partition\b", re.IGNORECASE),
     re.compile(r"\bremove-partition\b", re.IGNORECASE),
+    re.compile(r"\bclear-disk\b", re.IGNORECASE),
+    re.compile(r"\binitialize-disk\b", re.IGNORECASE),
+    re.compile(r"\brobocopy\b[\s\S]*?\s/mir\b", re.IGNORECASE),
     # Power control
     re.compile(r"\bstop-computer\b", re.IGNORECASE),
     re.compile(r"\brestart-computer\b", re.IGNORECASE),
@@ -92,7 +105,6 @@ DESTRUCTIVE_VERBS: List[re.Pattern] = [
     re.compile(r"\bremove-itemproperty\b", re.IGNORECASE),
     re.compile(r"\breg\s+delete\b", re.IGNORECASE),
     re.compile(r"\breg\s+add\b", re.IGNORECASE),
-    re.compile(r"\bremove-item\b", re.IGNORECASE),
     re.compile(r"\bclear-itemproperty\b", re.IGNORECASE),
     # ACL / ownership changes on system targets
     re.compile(r"\btakeown\b", re.IGNORECASE),

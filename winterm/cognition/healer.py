@@ -55,8 +55,18 @@ class ErrorHealer:
 
         return proposal
 
-    def attempt_auto_heal(self, proposal: SelfHealingProposal) -> ExecutionResult:
-        """Executes the proposed self-healing remedy."""
+    def attempt_auto_heal(
+        self, proposal: SelfHealingProposal, confirm_high_risk: bool = False
+    ) -> ExecutionResult:
+        """Executes the proposed self-healing remedy.
+
+        auto_heal defaults to True on execute_step/run_goal, so this runs
+        automatically after almost any failure -- gated the same as every
+        other execution path. A healing command classified high-risk/
+        destructive is refused unless the caller's own confirm_high_risk
+        (threaded through from execute_step) is True; it does not get an
+        implicit pass just because it was auto-generated.
+        """
         if not proposal.healing_command:
             return ExecutionResult(
                 step_id="heal-attempt",
@@ -65,6 +75,18 @@ class ErrorHealer:
                 success=False,
                 stderr="No executable healing command provided in proposal.",
             )
+
+        from winterm.cognition.safety_gate import gate_command
+
+        refusal = gate_command(
+            command=proposal.healing_command,
+            shell=proposal.healing_shell,
+            confirm_high_risk=confirm_high_risk,
+            step_id="heal-attempt",
+            graph=self.graph,
+        )
+        if refusal is not None:
+            return refusal
 
         return self.executor.execute(
             proposal.healing_command,

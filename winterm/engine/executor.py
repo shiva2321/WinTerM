@@ -26,6 +26,7 @@ class WindowsShellExecutor:
         timeout_seconds: int = 60,
         step_id: str = "exec",
         auto_diagnose: bool = True,
+        background: bool = False,
     ) -> ExecutionResult:
         """Executes a terminal command on Windows with strict reliability and error trapping."""
         target_shell = shell or self.default_shell
@@ -80,6 +81,56 @@ class WindowsShellExecutor:
             except Exception:
                 startup_info = None
 
+        # Background/detached execution: launch and return immediately with the PID.
+        if background:
+            try:
+                creation_flags = 0
+                kwargs = {}
+                if os.name == "nt":
+                    creation_flags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
+                else:
+                    kwargs["start_new_session"] = True
+                bg_proc = subprocess.Popen(
+                    cmd_args,
+                    cwd=cwd,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    stdin=subprocess.DEVNULL,
+                    shell=False,
+                    startupinfo=startup_info,
+                    creationflags=creation_flags,
+                    **kwargs,
+                )
+                # A detached process owns the temp script; do not delete it.
+                duration_ms = int((time.perf_counter() - start_time) * 1000)
+                return ExecutionResult(
+                    step_id=step_id,
+                    command=command,
+                    shell=target_shell,
+                    success=True,
+                    exit_code=0,
+                    stdout=f"[BACKGROUND] Process launched detached (PID {bg_proc.pid}).",
+                    stderr="",
+                    duration_ms=duration_ms,
+                    timed_out=False,
+                )
+            except Exception as ex:
+                if temp_script_path:
+                    try:
+                        os.remove(temp_script_path)
+                    except Exception:
+                        pass
+                return ExecutionResult(
+                    step_id=step_id,
+                    command=command,
+                    shell=target_shell,
+                    success=False,
+                    exit_code=-1,
+                    stdout="",
+                    stderr=f"Background launch failure: {str(ex)}",
+                    duration_ms=int((time.perf_counter() - start_time) * 1000),
+                )
+
         try:
             proc = subprocess.Popen(
                 cmd_args,
@@ -99,18 +150,29 @@ class WindowsShellExecutor:
             exit_code = -1
             if proc:
                 # Cleanly kill the entire process tree on Windows using taskkill
-                try:
-                    subprocess.run(
-                        ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                    )
-                except Exception:
-                    proc.kill()
+                if os.name == "nt":
+                    try:
+                        subprocess.run(
+                            ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                        )
+                    except Exception:
+                        pass
                 try:
                     raw_stdout, raw_stderr = proc.communicate(timeout=2)
                 except Exception:
                     pass
+                # Guarantee the child is reaped so pipes/handles are not leaked.
+                if proc.poll() is None:
+                    try:
+                        proc.kill()
+                    except Exception:
+                        pass
+                    try:
+                        proc.wait(timeout=2)
+                    except Exception:
+                        pass
 
         except Exception as ex:
             exit_code = -1

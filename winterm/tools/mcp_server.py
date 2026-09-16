@@ -2,7 +2,8 @@
 
 import sys
 import json
-from typing import Any, Dict
+from typing import Any, Dict, Optional, Tuple
+from winterm import __version__ as WINTERM_VERSION
 from winterm.tools.tool_definitions import (
     plan_terminal_task,
     explain_terminal_command,
@@ -147,9 +148,45 @@ class WinTermMCPServer:
             "winterm_swarm_suggestions": winterm_swarm_suggestions,
             "winterm_swarm_status": winterm_swarm_status,
         }
+        # name -> required argument names, extracted from the exported JSON schema.
+        self._required_args: Dict[str, list] = {}
+        for item in EXPORTED_TOOLS_SCHEMA:
+            fn = item.get("function", {})
+            params = fn.get("parameters", {}) or {}
+            self._required_args[fn.get("name")] = list(params.get("required", []) or [])
+
+    @staticmethod
+    def _error(msg_id: Any, code: int, message: str, data: Any = None) -> Dict[str, Any]:
+        err: Dict[str, Any] = {"code": code, "message": message}
+        if data is not None:
+            err["data"] = data
+        return {"jsonrpc": "2.0", "id": msg_id, "error": err}
+
+    def _validate_arguments(self, tool_name: str, arguments: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Returns an error response if required arguments are missing, else None."""
+        if not isinstance(arguments, dict):
+            return self._error(None, -32602, "Invalid params: 'arguments' must be an object")
+        required = self._required_args.get(tool_name, [])
+        missing = [name for name in required if name not in arguments]
+        if missing:
+            return self._error(
+                None, -32602,
+                f"Invalid params: missing required argument(s) {missing} for tool '{tool_name}'",
+                data={"missing": missing},
+            )
+        return None
 
     def handle_request(self, req: Dict[str, Any]) -> Dict[str, Any]:
-        """Processes an incoming JSON-RPC request."""
+        """Processes an incoming JSON-RPC request (single or batched)."""
+        # JSON-RPC 2.0 batch support: a list of requests yields a list of responses.
+        if isinstance(req, list):
+            responses = []
+            for item in req:
+                resp = self.handle_request(item)
+                if resp is not None:
+                    responses.append(resp)
+            return responses
+
         method = req.get("method")
         msg_id = req.get("id")
 
@@ -165,7 +202,7 @@ class WinTermMCPServer:
                     "protocolVersion": "2024-11-05",
                     "serverInfo": {
                         "name": "winterm",
-                        "version": "0.3.0",
+                        "version": WINTERM_VERSION,
                     },
                     "capabilities": {
                         "tools": {"listChanged": False},
@@ -245,16 +282,19 @@ class WinTermMCPServer:
             }
 
         elif method == "tools/call":
-            params = req.get("params", {})
+            params = req.get("params") or {}
+            if not isinstance(params, dict):
+                return self._error(msg_id, -32602, "Invalid params: 'params' must be an object")
             tool_name = params.get("name")
-            arguments = params.get("arguments", {})
+            arguments = params.get("arguments") or {}
 
             if tool_name not in self.tools:
-                return {
-                    "jsonrpc": "2.0",
-                    "id": msg_id,
-                    "error": {"code": -32601, "message": f"Tool '{tool_name}' not found"},
-                }
+                return self._error(msg_id, -32602, f"Unknown tool '{tool_name}'")
+
+            validation_error = self._validate_arguments(tool_name, arguments)
+            if validation_error is not None:
+                validation_error["id"] = msg_id
+                return validation_error
 
             try:
                 result = self.tools[tool_name](**arguments)
@@ -267,11 +307,21 @@ class WinTermMCPServer:
                         ]
                     },
                 }
+            except TypeError as ex:
+                # Bad/missing arguments are an MCP "invalid params" error, not a server fault.
+                return self._error(msg_id, -32602, f"Invalid tool arguments: {str(ex)}")
             except Exception as ex:
+                # Tool execution failures are reported as MCP tool results with
+                # isError=true (per spec) rather than JSON-RPC transport errors.
                 return {
                     "jsonrpc": "2.0",
                     "id": msg_id,
-                    "error": {"code": -32000, "message": str(ex)},
+                    "result": {
+                        "isError": True,
+                        "content": [
+                            {"type": "text", "text": f"Tool '{tool_name}' failed: {str(ex)}"}
+                        ],
+                    },
                 }
 
         return {

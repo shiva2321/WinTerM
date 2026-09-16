@@ -3,6 +3,9 @@
 from typing import Dict, Any, List, Optional
 from winterm.models.context import ShellType, ElevationLevel
 from winterm.models.intent import PlanStep, ActionCategory
+from winterm.knowledge.param_safety import ps_literal, safe_identifier
+
+_CERT_LOCATIONS = ("LocalMachine", "CurrentUser")
 
 
 class SecurityCryptoSubsystem:
@@ -41,18 +44,20 @@ class SecurityCryptoSubsystem:
     @classmethod
     def list_certificates_in_store(cls, store_location: str = "LocalMachine", store_name: str = "My") -> PlanStep:
         """Lists installed X.509 certificates from the Windows Certificate Store."""
+        safe_location = store_location if store_location in _CERT_LOCATIONS else "LocalMachine"
+        safe_store = safe_identifier(store_name, fallback="My")
         return PlanStep(
-            step_id=f"sec-cert-list-{store_location}-{store_name}",
-            title=f"Inspect Windows Certificate Store: Cert:\\{store_location}\\{store_name}",
+            step_id=f"sec-cert-list-{safe_location}-{safe_store}",
+            title=f"Inspect Windows Certificate Store: Cert:\\{safe_location}\\{safe_store}",
             category=ActionCategory.SECURITY,
-            raw_intent=f"list certificates {store_location} {store_name}",
+            raw_intent=f"list certificates {safe_location} {safe_store}",
             target_shell=ShellType.POWERSHELL_51,
             command=(
-                f"Get-ChildItem -Path 'Cert:\\{store_location}\\{store_name}' -ErrorAction SilentlyContinue | "
+                f"Get-ChildItem -Path 'Cert:\\{safe_location}\\{safe_store}' -ErrorAction SilentlyContinue | "
                 f"Select-Object -Property Subject,Thumbprint,NotAfter,NotBefore,HasPrivateKey | "
                 f"ConvertTo-Json -Depth 5"
             ),
-            metadata={"subsystem": "security_crypto", "store": f"{store_location}\\{store_name}"},
+            metadata={"subsystem": "security_crypto", "store": f"{safe_location}\\{safe_store}"},
         )
 
     @classmethod
@@ -83,7 +88,7 @@ class SecurityCryptoSubsystem:
             raw_intent=f"add defender exclusion {folder_path}",
             target_shell=ShellType.POWERSHELL_51,
             required_elevation=ElevationLevel.ADMIN,
-            command=f"Add-MpPreference -ExclusionPath '{folder_path}'",
+            command=f"Add-MpPreference -ExclusionPath {ps_literal(folder_path)}",
             metadata={"subsystem": "security_crypto", "path": folder_path},
         )
 

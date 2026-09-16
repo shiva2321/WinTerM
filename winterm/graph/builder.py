@@ -58,6 +58,18 @@ class KnowledgeGraphBuilder:
     def __init__(self):
         self.graph = nx.MultiDiGraph()
 
+    def _add_relation(self, source: str, target: str, relation: str, **attrs) -> None:
+        """Adds an edge only if no edge with the same (source, target, relation) exists.
+
+        The graph is a MultiDiGraph, so reciprocal dataset declarations would
+        otherwise create duplicate parallel edges.
+        """
+        if self.graph.has_edge(source, target):
+            for _key, data in self.graph[source][target].items():
+                if data.get("relation") == relation:
+                    return
+        self.graph.add_edge(source, target, relation=relation, **attrs)
+
     def build(self) -> nx.MultiDiGraph:
         """Constructs and returns the fully populated Windows Terminal Knowledge Graph."""
         self._add_subsystems()
@@ -67,7 +79,16 @@ class KnowledgeGraphBuilder:
         self._add_services()
         self._add_errors_and_remedies()
         self._add_command_alternatives()
-        self._add_hf_corpus()
+        try:
+            self._add_hf_corpus()
+        except Exception:
+            # Optional enhancement corpus (requires network / `datasets`). Absence
+            # or failure must never prevent the deterministic graph from building.
+            import logging
+            logging.getLogger("winterm.graph.builder").warning(
+                "HuggingFace corpus unavailable; continuing with the deterministic dataset graph.",
+                exc_info=True,
+            )
         return self.graph
 
     def _add_subsystems(self):
@@ -236,9 +257,9 @@ class KnowledgeGraphBuilder:
                         risk_if_stopped="MEDIUM",
                     )
                 # svc_node depends on dep_node
-                self.graph.add_edge(svc_node_id, dep_node_id, relation=RelationType.DEPENDS_ON.value)
+                self._add_relation(svc_node_id, dep_node_id, RelationType.DEPENDS_ON.value)
                 # dep_node is dependency_of svc_node (blast radius edge)
-                self.graph.add_edge(dep_node_id, svc_node_id, relation=RelationType.DEPENDENCY_OF.value)
+                self._add_relation(dep_node_id, svc_node_id, RelationType.DEPENDENCY_OF.value)
 
             # Explicit Dependents
             for child in meta.get("dependents", []):
@@ -252,9 +273,9 @@ class KnowledgeGraphBuilder:
                         risk_if_stopped="MEDIUM",
                     )
                 # child depends on svc_node
-                self.graph.add_edge(child_node_id, svc_node_id, relation=RelationType.DEPENDS_ON.value)
+                self._add_relation(child_node_id, svc_node_id, RelationType.DEPENDS_ON.value)
                 # svc_node is dependency_of child
-                self.graph.add_edge(svc_node_id, child_node_id, relation=RelationType.DEPENDENCY_OF.value)
+                self._add_relation(svc_node_id, child_node_id, RelationType.DEPENDENCY_OF.value)
 
     def _add_errors_and_remedies(self):
         for err_code, meta in ERRORS_REMEDIES_DATA.items():
@@ -296,19 +317,53 @@ class KnowledgeGraphBuilder:
                         step_order=step.get("step", 1),
                     )
 
+    _STATEMENT_SPLIT = re.compile(r"\r?\n|;|\|\||&&|\|")
+    _MUTATING_COMMAND_HINT = re.compile(
+        r"\b(set|start|stop|restart|new|remove|add|clear|enable|disable|format|rename|move|copy|"
+        r"register|unregister|install|uninstall|kill|taskkill|sc|reg|net|bcdedit|takeown|icacls|"
+        r"robocopy|diskpart|shutdown|wmic)\b",
+        re.IGNORECASE,
+    )
+
     def _find_matching_command_node(self, command_text: str) -> Optional[str]:
-        """Matches a command text snippet against registered command nodes."""
-        cmd_text_lower = command_text.lower()
-        # Check cmdlets
+        """Matches a command text snippet against registered command nodes.
+
+        Chooses the *primary* command deterministically: a state-mutating verb
+        at the head of a statement wins over read-only helper commands, so a
+        remediation such as ``Get-Service RpcSs | Start-Service RpcSs`` links to
+        ``Start-Service`` rather than whichever cmdlet happened to be declared
+        first in the dataset.
+        """
+        text = command_text or ""
+        if not text.strip():
+            return None
+        lower = text.lower()
+
+        # Compute statement-head offsets (start, after ; | || && newline).
+        heads = {0}
+        for m in self._STATEMENT_SPLIT.finditer(text):
+            heads.add(m.end())
+
+        def is_statement_head(pos: int) -> bool:
+            return any(h <= pos and text[h:pos].strip() == "" for h in heads)
+
+        candidates = []  # (-score, pos, -length, node_id)
         for cmdlet in CMDLETS_DATA:
-            if re.search(r"\b" + re.escape(cmdlet.lower()) + r"\b", cmd_text_lower):
-                return f"cmdlet:{cmdlet.lower()}"
-        # Check binaries
+            m = re.search(r"\b" + re.escape(cmdlet.lower()) + r"\b", lower)
+            if m:
+                score = (2 if self._MUTATING_COMMAND_HINT.search(cmdlet) else 0) + (1 if is_statement_head(m.start()) else 0)
+                candidates.append((-score, m.start(), -len(cmdlet), f"cmdlet:{cmdlet.lower()}"))
         for binary in NATIVE_BINARIES_DATA:
             base_name = binary.lower().replace(".exe", "")
-            if re.search(r"\b" + re.escape(base_name) + r"\b", cmd_text_lower):
-                return f"binary:{binary.lower()}"
-        return None
+            m = re.search(r"\b" + re.escape(base_name) + r"\b", lower)
+            if m:
+                score = (2 if self._MUTATING_COMMAND_HINT.search(base_name) else 0) + (1 if is_statement_head(m.start()) else 0)
+                candidates.append((-score, m.start(), -len(base_name), f"binary:{binary.lower()}"))
+
+        if not candidates:
+            return None
+        candidates.sort()
+        return candidates[0][3]
 
     def _add_command_alternatives(self):
         """Cross-links native binaries and PowerShell cmdlets that achieve equivalent outcomes."""
@@ -337,23 +392,28 @@ class KnowledgeGraphBuilder:
 
         # 1. Ingest Windows Commands & Parameters from IAmSomeone/Windows_command
         for cmd_key, meta in corpus.get("commands", {}).items():
-            bin_node_id = f"binary:{cmd_key}.exe"
-            subsystem = WIN_COMMAND_SUBSYSTEM_MAP.get(cmd_key, "ServicesTasks")
-            sub_node_id = f"subsystem:{subsystem}"
+            normalized_key = str(cmd_key).lower().replace(".exe", "")
+            bin_node_id = f"binary:{normalized_key}.exe"
+            # Only attach a subsystem when we have a real mapping; silently
+            # mislabelling unknown corpus commands as "ServicesTasks" corrupts
+            # subsystem queries.
+            subsystem = WIN_COMMAND_SUBSYSTEM_MAP.get(normalized_key)
+            sub_node_id = f"subsystem:{subsystem}" if subsystem else None
 
             if not self.graph.has_node(bin_node_id):
                 self.graph.add_node(
                     bin_node_id,
                     node_type=NodeType.COMMAND.value,
-                    name=f"{cmd_key}.exe",
+                    name=f"{normalized_key}.exe",
                     description=meta.get("description", ""),
                     syntax=meta.get("syntax", []),
                     applies_to=meta.get("applies_to", ""),
-                    subsystem=subsystem,
+                    subsystem=subsystem or "",
                     is_native_binary=True,
                     hf_source="IAmSomeone/Windows_command",
                 )
-                self.graph.add_edge(bin_node_id, sub_node_id, relation=RelationType.PART_OF_SUBSYSTEM.value)
+                if sub_node_id and self.graph.has_node(sub_node_id):
+                    self.graph.add_edge(bin_node_id, sub_node_id, relation=RelationType.PART_OF_SUBSYSTEM.value)
                 self.graph.add_edge(bin_node_id, "privilege:StandardUser", relation=RelationType.REQUIRES_PRIVILEGE.value)
             else:
                 # Enrich existing binary node
@@ -368,14 +428,14 @@ class KnowledgeGraphBuilder:
             # Attach parameters
             for param_token, param_desc in meta.get("parameters", {}).items():
                 clean_param = param_token.strip()
-                param_node_id = f"param:{cmd_key}.exe:{clean_param.lower()}"
+                param_node_id = f"param:{normalized_key}.exe:{clean_param.lower()}"
                 if not self.graph.has_node(param_node_id):
                     self.graph.add_node(
                         param_node_id,
                         node_type=NodeType.PARAMETER.value,
                         name=clean_param,
                         description=param_desc,
-                        command=f"{cmd_key}.exe",
+                        command=f"{normalized_key}.exe",
                     )
                     self.graph.add_edge(bin_node_id, param_node_id, relation=RelationType.HAS_PARAMETER.value)
 

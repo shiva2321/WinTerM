@@ -4,6 +4,7 @@ import os
 from typing import Dict, Any, List, Optional
 from winterm.models.context import ShellType, ElevationLevel
 from winterm.models.intent import PlanStep, ActionCategory
+from winterm.knowledge.param_safety import ps_literal, cmd_quote
 
 
 class StorageNTFSSubsystem:
@@ -45,19 +46,20 @@ class StorageNTFSSubsystem:
     @classmethod
     def query_bitlocker_status(cls, drive_letter: str = "C:") -> PlanStep:
         """Inspects BitLocker encryption status, key protectors, and lock state."""
+        drive = str(drive_letter or "C:").strip() or "C:"
         return PlanStep(
-            step_id=f"bitlocker-query-{drive_letter[0]}",
-            title=f"Inspect BitLocker Encryption for {drive_letter}",
+            step_id=f"bitlocker-query-{drive[0]}",
+            title=f"Inspect BitLocker Encryption for {drive}",
             category=ActionCategory.STORAGE,
-            raw_intent=f"query bitlocker {drive_letter}",
+            raw_intent=f"query bitlocker {drive}",
             target_shell=ShellType.POWERSHELL_51,
             required_elevation=ElevationLevel.ADMIN,
             command=(
-                f"Get-BitLockerVolume -MountPoint '{drive_letter}' | "
+                f"Get-BitLockerVolume -MountPoint {ps_literal(drive)} | "
                 f"Select-Object -Property MountPoint,VolumeStatus,EncryptionMethod,ProtectionStatus,LockStatus | "
                 f"ConvertTo-Json -Depth 5"
             ),
-            metadata={"subsystem": "storage", "drive": drive_letter},
+            metadata={"subsystem": "storage", "drive": drive},
         )
 
     @classmethod
@@ -85,7 +87,7 @@ class StorageNTFSSubsystem:
             raw_intent=f"create symlink {link_path} {target_path}",
             target_shell=ShellType.POWERSHELL_51,
             required_elevation=ElevationLevel.ADMIN if item_type == "SymbolicLink" else ElevationLevel.STANDARD,
-            command=f"New-Item -ItemType {item_type} -Path '{link_path}' -Target '{target_path}' -Force",
+            command=f"New-Item -ItemType {item_type} -Path {ps_literal(link_path)} -Target {ps_literal(target_path)} -Force",
             metadata={"subsystem": "storage", "link": link_path, "target": target_path},
         )
 
@@ -99,7 +101,7 @@ class StorageNTFSSubsystem:
             raw_intent=f"inspect acl {file_or_folder_path}",
             target_shell=ShellType.POWERSHELL_51,
             command=(
-                f"(Get-Acl -Path '{file_or_folder_path}').Access | "
+                f"(Get-Acl -Path {ps_literal(file_or_folder_path)}).Access | "
                 f"Select-Object -Property IdentityReference,FileSystemRights,AccessControlType,IsInherited | "
                 f"ConvertTo-Json -Depth 5"
             ),
@@ -116,7 +118,7 @@ class StorageNTFSSubsystem:
             raw_intent=f"grant acl {identity} {target_path}",
             target_shell=ShellType.CMD,
             required_elevation=ElevationLevel.ADMIN,
-            command=f'icacls "{target_path}" /grant "{identity}:(OI)(CI)F" /T /C /Q',
+            command=f'icacls {cmd_quote(target_path)} /grant {cmd_quote(identity)}:(OI)(CI)F /T /C /Q',
             metadata={"subsystem": "storage", "path": target_path, "identity": identity},
         )
 
@@ -130,6 +132,6 @@ class StorageNTFSSubsystem:
             raw_intent=f"take ownership {target_path}",
             target_shell=ShellType.CMD,
             required_elevation=ElevationLevel.ADMIN,
-            command=f'takeown /F "{target_path}" /R /D Y',
+            command=f'takeown /F {cmd_quote(target_path)} /R /D Y',
             metadata={"subsystem": "storage", "path": target_path},
         )

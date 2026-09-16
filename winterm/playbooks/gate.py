@@ -15,10 +15,14 @@ from winterm.models.context import ShellType
 class JustificationResult(BaseModel):
     """Evaluation outcome explaining whether a task qualifies for script synthesis."""
     is_justified: bool
-    requires_script: bool = Field(description="Alias for is_justified")
+    requires_script: bool = Field(default=False, description="Alias for is_justified")
     reason: str
     suggested_action: str  # "execute_direct" | "synthesize_script"
     complexity_score: int = Field(default=0, description="Heuristic score from 0 (trivial) to 10 (complex)")
+
+    def model_post_init(self, __context: object) -> None:
+        # Keep the documented alias consistent regardless of how the model is built.
+        self.requires_script = self.is_justified
 
 
 class ScriptNotJustifiedError(ValueError):
@@ -40,23 +44,14 @@ class ScriptJustificationGate:
       5. Multi-line scripted routines.
     """
 
-    # Regex patterns matching control flow and scripting constructs
+    # Regex patterns matching control-flow constructs *in statement position*.
+    # The anchors matter: bare ``\bif\b`` matched file arguments such as
+    # ``Get-Item if.txt`` or ``findstr TRY`` and wrongly justified a script.
     _CONTROL_FLOW_PATTERNS = [
-        r"\bif\b",
-        r"\belse\b",
-        r"\belif\b",
-        r"\belseif\b",
-        r"\bswitch\b",
-        r"\bcase\b",
-        r"\bfor\b",
-        r"\bforeach\b",
-        r"\bwhile\b",
-        r"\buntil\b",
-        r"\btry\b",
-        r"\bcatch\b",
-        r"\bfinally\b",
-        r"\btrap\b",
-        r"\bfunction\b",
+        r"(?:^|[;{}(}\n]\s*)(?:if|elif|elseif|else)\b\s*[\(\{]",
+        r"(?:^|[;{}(}\n]\s*)(?:for|foreach|while|until)\b\s*[\(\{]",
+        r"(?:^|[;{}(}\n]\s*)(?:switch|case|trap|function)\b",
+        r"(?:^|[;{}(}\n]\s*)(?:try|catch|finally)\b",
         r"\|\|\s*(?:exit|return|throw|echo|Write-Error)",
         r"&&\s*",
         r";\s*[\$\w]",
