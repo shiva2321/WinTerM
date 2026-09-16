@@ -797,7 +797,7 @@ def input_hover(
         from winterm.engine.executor import WindowsShellExecutor
         from winterm.models.context import ShellType
         cmd = MouseEngine.build_hover_command(x, y, hwnd=None, dwell_ms=dwell)
-        res = WindowsShellExecutor().execute(cmd, target_shell=ShellType.POWERSHELL_51)
+        res = WindowsShellExecutor().execute(cmd, shell=ShellType.POWERSHELL_51)
     console.print(res.stdout or res.stderr, markup=False)
 
 
@@ -960,8 +960,12 @@ def ui_perceive(
     """Generates a compact Markdown UI perception map and coordinate index."""
     agent = WinTermAgent()
     perception = agent.perceive_ui(window, max_items=limit, include_ocr=ocr)
-    md_tree = perception.get("ui_summary_markdown", "")
-    console.print(Panel(md_tree or "[dim]No UI elements[/dim]", title=f"UI Perception Map: {escape(window)}", border_style="cyan"))
+    tree = perception.get("accessibility_tree") or {}
+    md_tree = tree.get("markdown_tree", "") if isinstance(tree, dict) else str(tree)
+    ocr_data = perception.get("ocr") or {}
+    if ocr and isinstance(ocr_data, dict) and ocr_data.get("text"):
+        md_tree = (md_tree + "\n\n### OCR Text\n" + str(ocr_data.get("text", ""))).strip()
+    console.print(Panel(escape(md_tree) or "[dim]No UI elements[/dim]", title=f"UI Perception Map: {escape(window)}", border_style="cyan"))
 
 
 @ui_cli.command("som")
@@ -1196,40 +1200,39 @@ def playbook_run(
     if params:
         try:
             parsed_params = json.loads(params)
+            if not isinstance(parsed_params, dict):
+                console.print("[red]Error: --params JSON must be a dictionary/object[/red]")
+                return
         except Exception:
-            console.print(f"[red]Error: Invalid JSON passed to --params: {params}[/red]")
+            console.print("[red]Error: Invalid JSON passed to --params: {params}[/red]")
             return
 
     # If playbook_id exists directly
     existing_pbs = {pb.playbook_id: pb for pb in agent.list_playbooks()}
     if playbook_id in existing_pbs:
-        console.print(f"[cyan]Executing playbook '{playbook_id}'...[/cyan]")
+        console.print(f"[cyan]Executing playbook '{escape(playbook_id)}'...[/cyan]")
         res = agent.execute_playbook(playbook_id, parameters=parsed_params, background=background)
         if res.success:
             console.print(f"[green][OK] Executed successfully:[/green]\n{res.stdout}")
         else:
-            console.print(f"[red][X] Execution failed (exit {res.exit_code}):[/red]\n{res.stderr}")
+            console.print(f"[red][X] Execution failed (exit {res.exit_code}):[/red]\n{escape(res.stderr) if res.stderr else ''}")
         return
 
     # Otherwise treat as a natural language goal to match
     console.print(f"[cyan]Matching goal '{playbook_id}' against playbook catalog...[/cyan]")
     match_res = agent.match_playbook(playbook_id)
     if match_res.matched and match_res.playbook:
-        console.print(f"[green]Matched playbook '{match_res.playbook.playbook_id}' ({match_res.playbook.name}) [Confidence: {match_res.confidence}][/green]")
+        console.print(f"[green]Matched playbook '{match_res.playbook.playbook_id}' ({escape(match_res.playbook.name)}) [Confidence: {match_res.confidence}][/green]")
         merged = match_res.extracted_params.copy()
         merged.update(parsed_params)
         if merged:
             console.print(f"[yellow]Parameters extracted:[/yellow] {merged}")
         res = agent.execute_playbook(match_res.playbook.playbook_id, parameters=merged, background=background)
         if res.success:
-            console.print(f"[green][OK] Executed successfully:[/green]\n{res.stdout}")
+            console.print(f"[green][OK] Executed successfully:[/green]\n{escape(res.stdout) if res.stdout else ''}")
         else:
             console.print(f"[red][X] Execution failed (exit {res.exit_code}):[/red]\n{res.stderr}")
-    else:
-        console.print(f"[yellow]No matching playbook found for '{playbook_id}'. Run 'winterm plan \"{playbook_id}\"' instead.[/yellow]")
-
-
-@playbook_cli.command("prune")
+    
 def playbook_prune(
     max_items: int = typer.Option(30, "--max-items", "-m", help="Maximum active playbooks to keep"),
 ):
@@ -1297,10 +1300,10 @@ def swarm_status():
 
         for a in status["agents"]:
             table.add_row(
-                a["agent_id"],
-                a["name"],
-                a["privilege"],
-                a["status"],
+                escape(a["agent_id"]),
+                escape(a["name"]),
+                escape(a["privilege"]),
+                escape(a["status"]),
                 str(a["steps_executed"]),
                 str(a["faults_count"]),
                 "YES" if a["is_isolated"] else "No",
@@ -1334,7 +1337,7 @@ def swarm_board(
     table.add_column("Content", style="white")
 
     for m in msgs:
-        table.add_row(m.sender_id, m.message_type.value, m.content)
+        table.add_row(escape(m.sender_id), escape(m.message_type.value), escape(m.content))
     console.print(table)
 
 
@@ -1342,6 +1345,7 @@ def swarm_board(
 def swarm_suggestions(
     action: str = typer.Argument("list", help="'list', 'approve', or 'reject'"),
     suggestion_id: Optional[str] = typer.Option(None, "--id", help="Suggestion ID to approve or reject"),
+    confirm_high_risk: bool = typer.Option(False, "--confirm-high-risk", help="Confirm execution of high-risk suggestion"),
 ):
     """Views, approves, or rejects proactive suggestions submitted by autonomous sub-agents."""
     agent = WinTermAgent()
@@ -1356,23 +1360,23 @@ def swarm_suggestions(
         table.add_column("Title", style="bold white")
         table.add_column("Proposed Action", style="green")
         for s in sugs:
-            table.add_row(s["suggestion_id"], s["proposing_agent_name"], s["title"], s["proposed_action"])
+            table.add_row(escape(s["suggestion_id"]), escape(s["proposing_agent_name"]), escape(s["title"]), escape(s["proposed_action"]))
         console.print(table)
-    elif action == "approve":
+    elif action in ("approve", "reject"):
         if not suggestion_id:
-            console.print("[red]Error: --id is required to approve a suggestion.[/red]")
+            console.print(f"[red]Error: --id is required to {action} a suggestion.[/red]")
             return
-        res = agent.approve_swarm_suggestion(suggestion_id)
-        if res.get("approved"):
-            console.print(f"[green][OK] Approved and executed suggestion '{suggestion_id}'.[/green]")
+        if action == "approve":
+            res = agent.approve_swarm_suggestion(suggestion_id, confirm_high_risk=confirm_high_risk)
+            if res.get("approved"):
+                console.print(f"[green][OK] Approved and executed suggestion '{escape(suggestion_id)}'.[/green]")
+            else:
+                console.print(f"[red][X] Failed to approve: {res.get('error')}[/red]")
         else:
-            console.print(f"[red][X] Failed to approve: {res.get('error')}[/red]")
-    elif action == "reject":
-        if not suggestion_id:
-            console.print("[red]Error: --id is required to reject a suggestion.[/red]")
-            return
-        agent.reject_swarm_suggestion(suggestion_id)
-        console.print(f"[yellow]Rejected suggestion '{suggestion_id}'.[/yellow]")
+            agent.reject_swarm_suggestion(suggestion_id)
+            console.print(f"[yellow]Rejected suggestion '{escape(suggestion_id)}'.[/yellow]")
+    else:
+        console.print("[red]Error: Unknown action. Use 'list', 'approve', or 'reject'.[/red]")
 
 
 if __name__ == "__main__":

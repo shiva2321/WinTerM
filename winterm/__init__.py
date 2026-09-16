@@ -8,7 +8,7 @@ Empowers AI agents to master Windows Terminal handling through the 5W Cognitive 
 - What happens after: State diff prediction, rollback generation, verification & self-healing
 """
 
-__version__ = "0.1.0"
+__version__ = "0.4.0"
 __author__ = "WinTerm AI Team"
 
 from winterm.agent.winterm_agent import WinTermAgent

@@ -38,14 +38,42 @@ PROTECTED_LINUX_PATHS: List[re.Pattern] = [
 
 # Explicitly destructive patterns on Linux
 DESTRUCTIVE_LINUX_PATTERNS: List[Tuple[re.Pattern, str]] = [
-    # 1. Recursive deletions of root or vital directories
+    # 1. Recursive deletions of root or vital directories.
+    #    Matches any recursive `rm` aimed at an absolute path, the home/root
+    #    glob, or a wildcard. Relative sub-directory deletes (e.g. `rm -rf build/`)
+    #    are intentionally *not* escalated unless they resolve to a glob.
     (
-        re.compile(r"\brm\b\s+.*-(?:[a-zA-Z]*r[a-zA-Z]*|-recursive)\b.*?(?:/|/\*|~|/etc|/boot|/bin|/sbin|/usr|/var|/dev|/sys|/proc)(?:\s+|$)", re.IGNORECASE),
+        re.compile(
+            r"\brm\b[^\n;|]*?(?:-[a-z]*r[a-z]*\b|--recursive\b)[^\n;|]*?("
+            r"--no-preserve-root"
+            r"|\s/\*"
+            r"|\s/(?:\s|$|;|\|)"
+            r"|\s~(?:\s|$|/)"
+            r"|\s/(?:bin|boot|dev|etc|lib|lib64|opt|proc|root|sbin|sys|usr|var)(?:/|\s|$|\*)"
+            r"|\s/(?:home|mnt|media|srv|data|tmp|run)(?:/|\s|$|\*)"
+            r"|\s\*(?:\s|$|;|\|)"
+            r"|\s\.\*(?:\s|$|;|\|)"
+            r")",
+            re.IGNORECASE,
+        ),
         "Recursive deletion targeting root or vital system directories.",
     ),
     (
         re.compile(r"\brm\s+-[a-zA-Z]*[rf][a-zA-Z]*\s+--no-preserve-root", re.IGNORECASE),
         "Explicit --no-preserve-root flag passed to rm.",
+    ),
+    # 1b. Indirect recursive deletion via find/xargs
+    (
+        re.compile(r"\bfind\s+[^\n;|]*\s-delete\b", re.IGNORECASE),
+        "Recursive 'find -delete' operation can purge entire directory trees.",
+    ),
+    (
+        re.compile(r"\bxargs\b[^\n;|]*\brm\b[^\n;|]*-[a-zA-Z]*r", re.IGNORECASE),
+        "xargs piped into recursive 'rm' deletion.",
+    ),
+    (
+        re.compile(r"\bmv\b\s+[^\s;|]+\s+/(?:\s|$|;)|\bmv\b[^\n;|]*\s+/\*", re.IGNORECASE),
+        "Moving a filesystem overflow into root/hierarchy.",
     ),
     # 2. Classic Bash fork bomb
     (
@@ -168,7 +196,10 @@ class LinuxSafetyGuard:
             if match:
                 return LinuxSafetyVerdict(
                     label="privileged",
-                    is_dangerous=False,  # Privileged is not inherently destructive, but requires elevation
+                    # Aligned with the Windows SafetyGuard: privileged operations
+                    # require elevation and are treated as dangerous so a
+                    # sandboxed agent cannot silently escalate to root.
+                    is_dangerous=True,
                     warning=warning,
                     matched_pattern=pattern.pattern,
                     matched_target=match.group(0),
@@ -208,10 +239,11 @@ class LinuxSafetyGuard:
                     flags=re.IGNORECASE,
                 )
 
-        # pacman: inject --noconfirm
+        # pacman: inject --noconfirm immediately after the sub-command so a
+        # compound tail (e.g. `pacman -S foo && reboot`) is not corrupted.
         elif re.search(r"\bpacman\s+-S[a-zA-Z]*\b", cmd, re.IGNORECASE):
             if "--noconfirm" not in cmd:
-                cmd = f"{cmd} --noconfirm"
+                cmd = re.sub(r"(\bpacman\s+-S[a-zA-Z]*)", r"\1 --noconfirm", cmd, count=1, flags=re.IGNORECASE)
 
         # apk: inject --no-cache
         elif re.search(r"\bapk\s+add\b", cmd, re.IGNORECASE):

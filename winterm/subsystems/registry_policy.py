@@ -3,6 +3,7 @@
 from typing import Dict, Any, List, Optional
 from winterm.models.context import ShellType, ElevationLevel
 from winterm.models.intent import PlanStep, ActionCategory
+from winterm.knowledge.param_safety import ps_literal, ps_scalar, safe_identifier
 
 
 class RegistryPolicySubsystem:
@@ -20,17 +21,20 @@ class RegistryPolicySubsystem:
     ) -> PlanStep:
         """Sets a strictly-typed registry property (DWord, QWord, String, etc.)."""
         reg_type = prop_type if prop_type in cls.VALID_REG_TYPES else "DWord"
-        requires_admin = "hklm" in path.lower() or "hkey_local_machine" in path.lower()
+        requires_admin = "hklm" in str(path).lower() or "hkey_local_machine" in str(path).lower()
+        safe_path = ps_literal(path)
+        safe_name = ps_literal(name)
+        safe_value = ps_scalar(value)
         return PlanStep(
-            step_id=f"reg-set-{name}",
+            step_id=f"reg-set-{safe_identifier(name, fallback='value')}",
             title=f"Set Registry [{path}] {name}={value} ({reg_type})",
             category=ActionCategory.REGISTRY,
             raw_intent=f"set registry {path} {name}",
             target_shell=ShellType.POWERSHELL_51,
             required_elevation=ElevationLevel.ADMIN if requires_admin else ElevationLevel.STANDARD,
             command=(
-                f"if (-not (Test-Path '{path}')) {{ New-Item -Path '{path}' -Force | Out-Null }}; "
-                f"Set-ItemProperty -Path '{path}' -Name '{name}' -Value {value} -Type {reg_type} -Force"
+                f"if (-not (Test-Path {safe_path})) {{ New-Item -Path {safe_path} -Force | Out-Null }}; "
+                f"Set-ItemProperty -Path {safe_path} -Name {safe_name} -Value {safe_value} -Type {reg_type} -Force"
             ),
             metadata={"subsystem": "registry_policy", "path": path, "name": name, "type": reg_type},
         )
@@ -38,6 +42,7 @@ class RegistryPolicySubsystem:
     @classmethod
     def query_registry_tree(cls, path: str) -> PlanStep:
         """Recursively queries a registry key and all child values."""
+        safe_path = ps_literal(path)
         return PlanStep(
             step_id="reg-tree-query",
             title=f"Inspect Registry Subtree: {path}",
@@ -45,7 +50,7 @@ class RegistryPolicySubsystem:
             raw_intent=f"query registry tree {path}",
             target_shell=ShellType.POWERSHELL_51,
             command=(
-                f"Get-ItemProperty -Path '{path}' -ErrorAction Stop | "
+                f"Get-ItemProperty -Path {safe_path} -ErrorAction Stop | "
                 f"Select-Object -Property * -ExcludeProperty PSPath,PSParentPath,PSChildName,PSDrive,PSProvider | "
                 f"ConvertTo-Json -Depth 5"
             ),

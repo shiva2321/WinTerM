@@ -20,6 +20,29 @@ _RE_APP = re.compile(r"\b(?:process|app|application|program)\s+['\"]?([a-zA-Z0-9
 class ScriptGeneralizer:
     """Analyzes task commands and natural goals to abstract literals into typed parameters."""
 
+    @staticmethod
+    def _substitute_literal(command: str, value: Any, replacement: str) -> str:
+        """Replaces a literal parameter value with ``replacement`` without corrupting
+        longer tokens.
+
+        A naive global ``re.sub(str(value), ...)`` turns ``-Id 1234`` into
+        ``-Id $Pid234`` when the default is ``1`` and ``findstr 8080`` into
+        ``findstr $Port80`` when the default is ``80``. Boundary-aware anchors
+        prevent both.
+        """
+        val = str(value)
+        if val == "":
+            return command
+        escaped = re.escape(val)
+        if re.fullmatch(r"-?\d+", val):
+            pattern = r"(?<![\w.])" + escaped + r"(?![\w.])"
+        elif re.fullmatch(r"[A-Za-z0-9_\-]+", val):
+            pattern = r"(?<![\w\-])" + escaped + r"(?![\w\-])"
+        else:
+            # Paths / complex values: don't match inside a longer path or identifier.
+            pattern = r"(?<![\w\\/.\-])" + escaped + r"(?![\w\\/.\-])"
+        return re.sub(pattern, replacement, command)
+
     @classmethod
     def extract_signature_and_params(cls, goal: str, commands: List[str]) -> Tuple[str, List[PlaybookParameter]]:
         """Extracts a normalized pattern signature and identified parameters from a goal and commands."""
@@ -176,8 +199,9 @@ class ScriptGeneralizer:
             for p in parameters:
                 if p.default_value is not None:
                     # Replace literal default with variable
-                    val_str = str(p.default_value)
-                    generalized_cmd = re.sub(re.escape(val_str), f"${p.name.capitalize()}", generalized_cmd)
+                    generalized_cmd = cls._substitute_literal(
+                        generalized_cmd, p.default_value, f"${p.name.capitalize()}"
+                    )
             lines.append(generalized_cmd)
 
         return "\n".join(lines)
@@ -207,8 +231,9 @@ class ScriptGeneralizer:
             generalized_cmd = cmd
             for p in parameters:
                 if p.default_value is not None:
-                    val_str = str(p.default_value)
-                    generalized_cmd = re.sub(re.escape(val_str), f"${{{p.name.upper()}}}", generalized_cmd)
+                    generalized_cmd = cls._substitute_literal(
+                        generalized_cmd, p.default_value, f"${{{p.name.upper()}}}"
+                    )
             lines.append(generalized_cmd)
 
         return "\n".join(lines)
@@ -235,8 +260,9 @@ class ScriptGeneralizer:
             generalized_cmd = cmd
             for p in parameters:
                 if p.default_value is not None:
-                    val_str = str(p.default_value)
-                    generalized_cmd = re.sub(re.escape(val_str), f"%{p.name.upper()}%", generalized_cmd)
+                    generalized_cmd = cls._substitute_literal(
+                        generalized_cmd, p.default_value, f"%{p.name.upper()}%"
+                    )
             lines.append(generalized_cmd)
 
         return "\n".join(lines)
@@ -296,7 +322,13 @@ class ScriptGeneralizer:
         """Extracts concrete parameter values from the goal based on expected playbook parameters."""
         extracted: Dict[str, Any] = {}
         for p in playbook.parameters:
-            if p.name == "port" or p.param_type == "int":
+            if p.name == "pid":
+                m = _RE_PID.search(goal)
+                if m:
+                    extracted[p.name] = int(m.group(1))
+                elif p.default_value is not None:
+                    extracted[p.name] = p.default_value
+            elif p.name == "port" or p.param_type == "int":
                 m = _RE_PORT.search(goal)
                 if m:
                     extracted[p.name] = int(m.group(2))
@@ -312,12 +344,6 @@ class ScriptGeneralizer:
                 m = _RE_SERVICE.search(goal)
                 if m:
                     extracted[p.name] = m.group(1).strip()
-                elif p.default_value is not None:
-                    extracted[p.name] = p.default_value
-            elif p.name == "pid":
-                m = _RE_PID.search(goal)
-                if m:
-                    extracted[p.name] = int(m.group(1))
                 elif p.default_value is not None:
                     extracted[p.name] = p.default_value
             else:

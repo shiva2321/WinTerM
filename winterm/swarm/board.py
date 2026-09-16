@@ -81,7 +81,9 @@ class SwarmMessageBoard:
         if since_timestamp is not None:
             results = [m for m in results if m.timestamp >= since_timestamp]
 
-        return results[-limit:]
+        if limit is not None and limit <= 0:
+            return []
+        return results[-limit:] if limit is not None else results
 
     # =========================================================================
     # 2. PROACTIVE SUGGESTIONS LEDGER

@@ -142,6 +142,10 @@ class WindowsOCREngine:
             "        $null = [Windows.Globalization.Language, Windows.Globalization, ContentType = WindowsRuntime];\n"
             f"        $engine = [Windows.Media.Ocr.OcrEngine]::TryCreateFromLanguage([Windows.Globalization.Language]::new('{clean_lang}'));\n"
             "    };\n"
+            "    if (-not $engine) {\n"
+            "        @{ Success = $False; Target = $foundTitle; Error = 'Failed to initialize Windows OCR Engine for language profile' } | ConvertTo-Json -Compress;\n"
+            "        exit 0;\n"
+            "    };\n"
             "    $ocrResult = Await-WinRT ($engine.RecognizeAsync($softwareBitmap)) ([Windows.Media.Ocr.OcrResult]);\n"
             "    $linesList = [System.Collections.Generic.List[PSCustomObject]]::new();\n"
             "    $allWords = [System.Collections.Generic.List[PSCustomObject]]::new();\n"
@@ -200,12 +204,11 @@ class WindowsOCREngine:
         language_tag: str = "en-US",
     ) -> str:
         """Finds matching text in a window via OCR and returns its exact screen coordinates for clicking."""
-        clean_target = window_identifier.replace("'", "''")
         clean_query = text_query.replace("'", "''")
-        clean_lang = language_tag.replace("'", "''")
 
+        # Pass the *raw* identifier/language; build_ocr_window_command escapes once.
         script = (
-            f"{cls.build_ocr_window_command(clean_target, language_tag=clean_lang)}\n"
+            f"{cls.build_ocr_window_command(window_identifier, language_tag=language_tag)}\n"
         )
         # Wrap script to filter for best match
         wrapped = (
@@ -215,6 +218,7 @@ class WindowsOCREngine:
             f"$query = '{clean_query}';\n"
             "$matches = [System.Collections.Generic.List[PSCustomObject]]::new();\n"
             "foreach ($w in $data.Words) {\n"
+            "    if (-not $w.Text) { continue };\n"
             "    if ($w.Text -like \"*$query*\" -or $query -like \"*$($w.Text)*\") {\n"
             "        $matches.Add($w);\n"
             "    };\n"

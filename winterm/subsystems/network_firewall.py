@@ -3,6 +3,11 @@
 from typing import Dict, Any, List, Optional
 from winterm.models.context import ShellType, ElevationLevel
 from winterm.models.intent import PlanStep, ActionCategory
+from winterm.knowledge.param_safety import ps_literal, safe_identifier, validated_choice, int_in_range
+
+_DIRECTIONS = ("Inbound", "Outbound")
+_PROTOCOLS = ("TCP", "UDP", "ICMPv4", "ICMPv6", "Any")
+_ACTIONS = ("Allow", "Block", "NotConfigured")
 
 
 class NetworkFirewallSubsystem:
@@ -52,32 +57,38 @@ class NetworkFirewallSubsystem:
         action: str = "Allow",
     ) -> PlanStep:
         """Creates a rule in Windows Defender Advanced Firewall."""
+        safe_name = safe_identifier(rule_name, fallback="WinTermRule")
+        safe_port = int_in_range(port, 1, 65535, 0)
+        safe_proto = validated_choice(protocol, _PROTOCOLS, "TCP")
+        safe_dir = validated_choice(direction, _DIRECTIONS, "Inbound")
+        safe_action = validated_choice(action, _ACTIONS, "Allow")
         return PlanStep(
-            step_id=f"net-fw-create-{rule_name.replace(' ', '_')}",
-            title=f"Create Firewall Rule '{rule_name}' ({direction} {protocol} {port} -> {action})",
+            step_id=f"net-fw-create-{safe_name}",
+            title=f"Create Firewall Rule '{safe_name}' ({safe_dir} {safe_proto} {safe_port} -> {safe_action})",
             category=ActionCategory.NETWORK,
-            raw_intent=f"create firewall rule {rule_name}",
+            raw_intent=f"create firewall rule {safe_name}",
             target_shell=ShellType.POWERSHELL_51,
             required_elevation=ElevationLevel.ADMIN,
             command=(
-                f"New-NetFirewallRule -DisplayName '{rule_name}' -Direction {direction} "
-                f"-LocalPort {port} -Protocol {protocol} -Action {action} -Profile Any"
+                f"New-NetFirewallRule -DisplayName {ps_literal(safe_name)} -Direction {safe_dir} "
+                f"-LocalPort {safe_port} -Protocol {safe_proto} -Action {safe_action} -Profile Any"
             ),
-            metadata={"subsystem": "network_firewall", "rule_name": rule_name, "port": port},
+            metadata={"subsystem": "network_firewall", "rule_name": safe_name, "port": safe_port},
         )
 
     @classmethod
     def remove_firewall_rule(cls, rule_name: str) -> PlanStep:
         """Deletes a named firewall rule."""
+        safe_name = safe_identifier(rule_name, fallback="WinTermRule")
         return PlanStep(
-            step_id=f"net-fw-del-{rule_name.replace(' ', '_')}",
-            title=f"Remove Firewall Rule: {rule_name}",
+            step_id=f"net-fw-del-{safe_name}",
+            title=f"Remove Firewall Rule: {safe_name}",
             category=ActionCategory.NETWORK,
-            raw_intent=f"remove firewall rule {rule_name}",
+            raw_intent=f"remove firewall rule {safe_name}",
             target_shell=ShellType.POWERSHELL_51,
             required_elevation=ElevationLevel.ADMIN,
-            command=f"Remove-NetFirewallRule -DisplayName '{rule_name}' -ErrorAction SilentlyContinue",
-            metadata={"subsystem": "network_firewall", "rule_name": rule_name},
+            command=f"Remove-NetFirewallRule -DisplayName {ps_literal(safe_name)} -ErrorAction SilentlyContinue",
+            metadata={"subsystem": "network_firewall", "rule_name": safe_name},
         )
 
     @classmethod

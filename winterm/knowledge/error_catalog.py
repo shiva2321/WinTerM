@@ -150,16 +150,55 @@ class WindowsErrorCatalog:
             requires_elevation=False,
         ),
 
-        # --- ROBOCOPY FATAL ERROR ---
-        ErrorDiagnosis(
-            pattern=r"(ExitCode:\s*([89]|1[0-6]))",
-            signature_name="ROBOCOPY_FATAL_ERROR",
-            root_cause="Robocopy encountered unrecoverable errors (exit code >= 8 indicates at least one file was not copied).",
-            remedy_explanation="Check read/write permissions on destination volume, disk space, and locked files.",
-            suggested_fix_template="robocopy \"{source}\" \"{dest}\" /E /Z /R:1 /W:1 /V",
-            requires_elevation=False,
-        ),
+        # --- ROBOCOPY FATAL ERROR (handled explicitly in diagnose(); a synthetic
+        # "ExitCode:" sentinel here would self-match and misfire). ---
     ]
+
+    _PLACEHOLDER_RE = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}")
+
+    @staticmethod
+    def _derive_placeholders(failed_command: str) -> Dict[str, str]:
+        """Best-effort extraction of template placeholders from the failed command."""
+        fc = failed_command or ""
+        out: Dict[str, str] = {}
+        quoted_paths = re.findall(r"['\"]([^'\"]+)['\"]", fc)
+        bare_paths = re.findall(r"([A-Za-z]:\\[^\s'\"]+)", fc)
+        paths = quoted_paths or bare_paths
+        if paths:
+            out["path"] = paths[0]
+            out["target"] = paths[0]
+            out["target_file"] = paths[0]
+            out["parent_dir"] = paths[0]
+        svc = re.search(r"(?:-Name|stop|start|restart|sc(?:\.exe)?)\s+['\"]?([\w\-.]+)", fc, re.IGNORECASE)
+        if svc:
+            out["service"] = svc.group(1)
+        port = re.search(r"\b(\d{2,5})\b", fc)
+        if port:
+            out["port"] = port.group(1)
+        quoted = re.findall(r'"([^"]+)"', fc)
+        if len(quoted) >= 2:
+            out["source"], out["dest"] = quoted[0], quoted[1]
+        # Fallback for command-not-found style templates: the first token.
+        if "target" not in out:
+            first = fc.strip().split()
+            if first:
+                out["target"] = first[0]
+        return out
+
+    @classmethod
+    def _render_fix(cls, template: str, failed_command: str) -> str:
+        """Substitutes all placeholders; returns an empty string if any remain unresolved."""
+        if not template:
+            return ""
+        placeholders = cls._derive_placeholders(failed_command)
+        rendered = template.replace("{failed_command}", (failed_command or "").replace('"', '`"'))
+        for key, value in placeholders.items():
+            rendered = rendered.replace("{" + key + "}", str(value))
+        if cls._PLACEHOLDER_RE.search(rendered):
+            # Unresolved placeholder -> executing this would be a broken command.
+            # Return empty so the healer does not run a malformed command.
+            return ""
+        return rendered
 
     @classmethod
     def diagnose(cls, stderr: str, stdout: str, exit_code: int, failed_command: str = "") -> Optional[SelfHealingProposal]:
@@ -168,16 +207,39 @@ class WindowsErrorCatalog:
         if exit_code == 0 and not (stderr and stderr.strip()):
             return None
 
-        combined_text = f"{stderr}\n{stdout}\nExitCode:{exit_code}"
+        # Robocopy has a distinctive exit-code contract (>=8 means failures) that
+        # is not encoded in its text output; evaluate it explicitly against the
+        # failed command rather than a synthetic string.
+        if "robocopy" in (failed_command or "").lower() and isinstance(exit_code, int) and 8 <= exit_code <= 16:
+            robocopy_diag = None
+            for d in cls.DIAGNOSES:
+                if d.signature_name == "ROBOCOPY_FATAL_ERROR":
+                    robocopy_diag = d
+                    break
+            if robocopy_diag is None:
+                robocopy_diag = ErrorDiagnosis(
+                    pattern=r"robocopy",
+                    signature_name="ROBOCOPY_FATAL_ERROR",
+                    root_cause="Robocopy encountered unrecoverable errors (exit code >= 8 indicates at least one file was not copied).",
+                    remedy_explanation="Check read/write permissions on destination volume, disk space, and locked files.",
+                    suggested_fix_template='robocopy "{source}" "{dest}" /E /Z /R:1 /W:1 /V',
+                    requires_elevation=False,
+                )
+            return SelfHealingProposal(
+                error_signature=robocopy_diag.signature_name,
+                root_cause=robocopy_diag.root_cause,
+                remedy_explanation=robocopy_diag.remedy_explanation,
+                healing_command=cls._render_fix(robocopy_diag.suggested_fix_template or "", failed_command),
+                healing_shell=ShellType.POWERSHELL_51,
+                requires_elevation=robocopy_diag.requires_elevation,
+            )
+
+        combined_text = f"{stderr}\n{stdout}"
 
         for diagnosis in cls.DIAGNOSES:
             match = diagnosis.pattern.search(combined_text)
             if match:
-                # Format fix template if available
-                fix_cmd = diagnosis.suggested_fix_template or ""
-                # Replace placeholders where possible
-                fix_cmd = fix_cmd.replace("{failed_command}", failed_command.replace('"', '`"'))
-
+                fix_cmd = cls._render_fix(diagnosis.suggested_fix_template or "", failed_command)
                 return SelfHealingProposal(
                     error_signature=diagnosis.signature_name,
                     root_cause=diagnosis.root_cause,

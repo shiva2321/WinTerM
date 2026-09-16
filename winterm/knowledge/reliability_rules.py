@@ -28,13 +28,22 @@ class ReliabilityRules:
     }
 
     @classmethod
-    def sanitize_for_windows_console(cls, text: str) -> str:
-        """Replaces problematic unicode emojis and characters with ASCII-safe tokens."""
+    def sanitize_for_windows_console(cls, text: str, ascii_only: bool = False) -> str:
+        """Replaces problematic Unicode emojis with ASCII-safe tokens.
+
+        Non-emoji Unicode (e.g. accented letters or CJK in paths/arguments) is
+        **preserved** by default: commands are passed to the shell as native
+        Unicode via ``CreateProcessW``. The previous unconditional
+        ``encode("ascii", "replace")`` silently corrupted any non-ASCII path or
+        argument into ``?``. Pass ``ascii_only=True`` for display/log strings
+        that must survive a legacy OEM console.
+        """
         sanitized = text
         for uni, ascii_repl in cls.UNICODE_TO_ASCII_MAP.items():
             sanitized = sanitized.replace(uni, ascii_repl)
-        # Strip any remaining non-ASCII characters that might break legacy OEM codepages
-        return sanitized.encode("ascii", errors="replace").decode("ascii")
+        if ascii_only:
+            sanitized = sanitized.encode("ascii", errors="replace").decode("ascii")
+        return sanitized
 
     @classmethod
     def format_executable_invocation(cls, command: str, shell: ShellType = ShellType.POWERSHELL_51) -> str:
@@ -82,7 +91,14 @@ class ReliabilityRules:
         It must be written as `if ((Test-Path a) -or (Test-Path b))`.
         """
         # Checks if expressions around -and or -or are missing parentheses
-        pattern = re.compile(r'\b(Test-Path|Get-Item|Get-ChildItem)\s+([^()\-]+?)\s+(-and|-or)\s+(Test-Path|Get-Item|Get-ChildItem)\s+([^()]+)', re.IGNORECASE)
+        pattern = re.compile(
+            r'\b(Test-Path|Get-Item|Get-ChildItem)\s+'
+            r'("[^"]*"|\'[^\']*\'|[^\s()]+)\s+'
+            r'(-and|-or)\s+'
+            r'(Test-Path|Get-Item|Get-ChildItem)\s+'
+            r'("[^"]*"|\'[^\']*\'|[^\s()]+)',
+            re.IGNORECASE,
+        )
         def replacer(match):
             cmd1, arg1, op, cmd2, arg2 = match.groups()
             return f"({cmd1.strip()} {arg1.strip()}) {op} ({cmd2.strip()} {arg2.strip()})"
@@ -103,6 +119,12 @@ class ReliabilityRules:
                     cmd += " -Confirm:$false"
                 if "-Force" not in cmd:
                     cmd += " -Force"
+            else:
+                # Appending '-Confirm:$false' to a compound statement would attach
+                # to the wrong cmdlet. Suppress confirmation globally instead so
+                # multi-statement scripts cannot hang on an interactive prompt.
+                if "$ConfirmPreference" not in cmd and "-Confirm" not in cmd:
+                    cmd = "$ConfirmPreference = 'None'; " + cmd
                 
         # winget
         if "winget install" in cmd.lower() or "winget upgrade" in cmd.lower():

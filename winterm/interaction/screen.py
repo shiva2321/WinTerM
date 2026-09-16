@@ -187,10 +187,12 @@ class ScreenPerceptionEngine:
         else:
             script = (
                 f"{cls.WIN32_SCREEN_HEADER}\n"
-                "$w = [Win32ScreenCore]::GetSystemMetrics(0);\n"
-                "$h = [Win32ScreenCore]::GetSystemMetrics(1);\n"
-                f"$ok = [Win32ScreenCore]::CaptureScreen('{clean_path}', 0, 0, $w, $h);\n"
-                f"@{{ Success = $ok; OutputPath = '{clean_path}'; Mode = 'FullScreen'; Width = $w; Height = $h }} | ConvertTo-Json -Compress"
+                "$left = [Win32ScreenCore]::GetSystemMetrics(76);\n"
+                "$top = [Win32ScreenCore]::GetSystemMetrics(77);\n"
+                "$w = [Win32ScreenCore]::GetSystemMetrics(78);\n"
+                "$h = [Win32ScreenCore]::GetSystemMetrics(79);\n"
+                f"$ok = [Win32ScreenCore]::CaptureScreen('{clean_path}', $left, $top, $w, $h);\n"
+                f"@{{ Success = $ok; OutputPath = '{clean_path}'; Mode = 'FullScreen'; X = $left; Y = $top; Width = $w; Height = $h }} | ConvertTo-Json -Compress"
             )
         return script
 

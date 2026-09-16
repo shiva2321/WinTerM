@@ -1,6 +1,7 @@
 """Windows Terminal Knowledge Graph Engine: Reasoning, blast radius, validation, and remediation."""
 
 import difflib
+import threading
 from typing import Dict, Any, List, Optional, Set, Tuple
 import networkx as nx
 
@@ -21,6 +22,7 @@ class WindowsKnowledgeGraph:
     _SHARED_CMD_INDEX: Optional[Dict[str, str]] = None
     _SHARED_RES_INDEX: Optional[Dict[str, str]] = None
     _SHARED_ERR_INDEX: Optional[Dict[str, str]] = None
+    _SHARED_LOCK: threading.Lock = threading.Lock()
 
     @staticmethod
     def _build_indices(graph: nx.MultiDiGraph) -> Tuple[Dict[str, str], Dict[str, str], Dict[str, str]]:
@@ -29,7 +31,7 @@ class WindowsKnowledgeGraph:
         err_index: Dict[str, str] = {}
         for node_id, data in graph.nodes(data=True):
             nt = data.get("node_type")
-            name = data.get("name", "").lower()
+            name = str(data.get("name") or "").lower()
             if nt == NodeType.COMMAND.value:
                 if name:
                     cmd_index[name] = node_id
@@ -41,22 +43,29 @@ class WindowsKnowledgeGraph:
             elif nt == NodeType.ERROR_CODE.value:
                 if name:
                     err_index[name] = node_id
-                ec = data.get("error_code", "").lower()
+                ec = data.get("error_code")
                 if ec:
-                    err_index[ec] = node_id
-                wc = str(data.get("win32_code", "")).lower()
-                if wc:
-                    err_index[wc] = node_id
+                    err_index[str(ec).lower()] = node_id
+                wc = data.get("win32_code")
+                # Only index real numeric win32 codes -- ``str(None) == "None"``
+                # previously polluted the index with a bogus "none" key.
+                if isinstance(wc, int) and not isinstance(wc, bool):
+                    err_index[str(wc)] = node_id
         return cmd_index, res_index, err_index
 
     def __init__(self, graph: Optional[nx.MultiDiGraph] = None):
         if graph is None:
+            # Double-checked locking so concurrent agent sessions never build the
+            # shared graph twice or observe a partially initialised index set.
             if WindowsKnowledgeGraph._SHARED_GRAPH is None:
-                WindowsKnowledgeGraph._SHARED_GRAPH = build_windows_knowledge_graph()
-                c_idx, r_idx, e_idx = self._build_indices(WindowsKnowledgeGraph._SHARED_GRAPH)
-                WindowsKnowledgeGraph._SHARED_CMD_INDEX = c_idx
-                WindowsKnowledgeGraph._SHARED_RES_INDEX = r_idx
-                WindowsKnowledgeGraph._SHARED_ERR_INDEX = e_idx
+                with WindowsKnowledgeGraph._SHARED_LOCK:
+                    if WindowsKnowledgeGraph._SHARED_GRAPH is None:
+                        built = build_windows_knowledge_graph()
+                        c_idx, r_idx, e_idx = self._build_indices(built)
+                        WindowsKnowledgeGraph._SHARED_CMD_INDEX = c_idx
+                        WindowsKnowledgeGraph._SHARED_RES_INDEX = r_idx
+                        WindowsKnowledgeGraph._SHARED_ERR_INDEX = e_idx
+                        WindowsKnowledgeGraph._SHARED_GRAPH = built
             self.graph = WindowsKnowledgeGraph._SHARED_GRAPH
             self._cmd_index = WindowsKnowledgeGraph._SHARED_CMD_INDEX or {}
             self._res_index = WindowsKnowledgeGraph._SHARED_RES_INDEX or {}
@@ -67,6 +76,15 @@ class WindowsKnowledgeGraph:
             self._cmd_index = c_idx
             self._res_index = r_idx
             self._err_index = e_idx
+
+    @staticmethod
+    def _as_str(value: Any) -> str:
+        """Coerces arbitrary input to a safe string (None/bool/int -> str)."""
+        if isinstance(value, str):
+            return value
+        if value is None:
+            return ""
+        return str(value)
 
     def get_metrics(self) -> Dict[str, Any]:
         """Returns node and edge topological counts across the graph."""
@@ -93,6 +111,13 @@ class WindowsKnowledgeGraph:
 
     def calculate_blast_radius(self, resource_name: str, depth: int = 2) -> BlastRadiusReport:
         """Calculates direct and cascading downstream entities affected if a service/resource is stopped or altered."""
+        resource_name = self._as_str(resource_name)
+        if not resource_name.strip():
+            return BlastRadiusReport(
+                root_node_id="",
+                risk_score="LOW",
+                impact_summary="No resource name supplied.",
+            )
         # Normalize resource node ID
         node_id = self._resolve_resource_node(resource_name)
         if not node_id or not self.graph.has_node(node_id):
@@ -195,6 +220,14 @@ class WindowsKnowledgeGraph:
 
     def validate_command_parameters(self, command: str, parameters: List[str]) -> ParameterValidationResult:
         """Validates that a cmdlet or native binary and all supplied parameters exist in the Knowledge Graph."""
+        command = self._as_str(command)
+        clean_parameters = [self._as_str(p) for p in (parameters or []) if p is not None]
+        if not command.strip():
+            return ParameterValidationResult(
+                command="",
+                is_valid=False,
+                unknown_parameters=clean_parameters,
+            )
         cmd_node_id = self._resolve_command_node(command)
 
         if not cmd_node_id or not self.graph.has_node(cmd_node_id):
@@ -202,14 +235,14 @@ class WindowsKnowledgeGraph:
             all_cmds = [
                 d.get("name")
                 for _, d in self.graph.nodes(data=True)
-                if d.get("node_type") == NodeType.COMMAND.value
+                if d.get("node_type") == NodeType.COMMAND.value and d.get("name")
             ]
             matches = difflib.get_close_matches(command, all_cmds, n=3, cutoff=0.5)
             suggestions = {command: matches[0]} if matches else {}
             return ParameterValidationResult(
                 command=command,
                 is_valid=False,
-                unknown_parameters=parameters,
+                unknown_parameters=clean_parameters,
                 suggestions=suggestions,
             )
 
@@ -225,7 +258,7 @@ class WindowsKnowledgeGraph:
         unknown_params: List[str] = []
         suggestions: Dict[str, str] = {}
 
-        for p in parameters:
+        for p in clean_parameters:
             p_clean = p.strip().lower()
             # In Windows PowerShell, flags often begin with '-', in CMD with '/'
             # Check direct match
@@ -259,6 +292,9 @@ class WindowsKnowledgeGraph:
 
     def find_remediation_chains(self, error_signature: str) -> Optional[RemediationPath]:
         """Resolves an error signature (HRESULT, Win32 code, or Exception name) to a graph remediation path."""
+        error_signature = self._as_str(error_signature)
+        if not error_signature.strip():
+            return None
         err_node_id = self._resolve_error_node(error_signature)
         if not err_node_id or not self.graph.has_node(err_node_id):
             return None
@@ -280,6 +316,9 @@ class WindowsKnowledgeGraph:
 
     def find_command_alternatives(self, command: str) -> List[str]:
         """Discovers equivalent native binaries for PowerShell cmdlets or vice-versa."""
+        command = self._as_str(command)
+        if not command.strip():
+            return []
         cmd_node_id = self._resolve_command_node(command)
         if not cmd_node_id or not self.graph.has_node(cmd_node_id):
             return []
@@ -298,7 +337,10 @@ class WindowsKnowledgeGraph:
     # =========================================================================
 
     def get_subsystem_commands(self, subsystem_name: str) -> List[str]:
-        """Retrieves all commands registered to a specific subsystem layer."""
+        """Retrieves all *command* nodes registered to a specific subsystem layer."""
+        subsystem_name = self._as_str(subsystem_name)
+        if not subsystem_name.strip():
+            return []
         sub_node_id = f"subsystem:{subsystem_name}"
         if not self.graph.has_node(sub_node_id):
             # Try case-insensitive lookup
@@ -310,11 +352,13 @@ class WindowsKnowledgeGraph:
         commands = []
         for source, _, data in self.graph.in_edges(sub_node_id, data=True):
             if data.get("relation") == RelationType.PART_OF_SUBSYSTEM.value:
+                if self.graph.nodes[source].get("node_type") != NodeType.COMMAND.value:
+                    continue
                 cmd_name = self.graph.nodes[source].get("name", "")
                 if cmd_name:
                     commands.append(cmd_name)
 
-        return sorted(commands)
+        return sorted(set(commands))
 
     # =========================================================================
     # 6. INTENT SEARCH & GROUNDING (from sumit-s-nair/command-dataset)
@@ -323,6 +367,7 @@ class WindowsKnowledgeGraph:
     def resolve_intent_to_commands(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
         """Finds closest matching natural-language Windows intents and returns their concrete commands."""
         import re
+        query = self._as_str(query)
         query_words = set(re.findall(r"\w+", query.lower()))
         if not query_words:
             return []
@@ -360,6 +405,9 @@ class WindowsKnowledgeGraph:
 
     def get_command_documentation(self, command: str) -> Optional[Dict[str, Any]]:
         """Retrieves official Microsoft syntax, parameter dictionary, and usage docs."""
+        command = self._as_str(command)
+        if not command.strip():
+            return None
         cmd_node_id = self._resolve_command_node(command)
         if not cmd_node_id or not self.graph.has_node(cmd_node_id):
             return None
@@ -395,7 +443,7 @@ class WindowsKnowledgeGraph:
         from winterm.knowledge.safety_guard import SafetyGuard
 
         # Deterministic first pass — never fail-open on destructive commands.
-        verdict = SafetyGuard().classify(command_string)
+        verdict = SafetyGuard().classify(self._as_str(command_string))
         if verdict is not None and verdict.label in ("destructive", "privileged"):
             return {
                 "safety_label": verdict.label,
@@ -413,14 +461,17 @@ class WindowsKnowledgeGraph:
                 "is_dangerous": False,
             }
 
-        cmd_lower = command_string.lower()
+        cmd_lower = self._as_str(command_string).lower()
         matched_rules = []
 
         for node_id, data in self.graph.nodes(data=True):
             if data.get("node_type") == NodeType.SAFETY_RULE.value:
-                ctx = data.get("intent_context", "").lower()
-                samp = data.get("command_sample", "").lower()
-                if samp and (samp in cmd_lower or cmd_lower in samp):
+                ctx = str(data.get("intent_context") or "").lower()
+                samp = str(data.get("command_sample") or "").lower()
+                # Containment must be *forward* (sample inside command) and
+                # non-trivial; the previous bidirectional test made an empty
+                # command match every rule and thus classify as destructive.
+                if samp and len(samp) >= 6 and len(cmd_lower) >= 4 and samp in cmd_lower:
                     matched_rules.append(data)
                 elif ctx and any(w in cmd_lower for w in ctx.split() if len(w) > 4):
                     matched_rules.append(data)
@@ -468,7 +519,9 @@ class WindowsKnowledgeGraph:
     # =========================================================================
 
     def _resolve_command_node(self, command: str) -> Optional[str]:
-        cmd_lower = command.lower().strip()
+        cmd_lower = self._as_str(command).lower().strip()
+        if not cmd_lower:
+            return None
         candidates = [
             f"cmdlet:{cmd_lower}",
             f"binary:{cmd_lower}",
@@ -480,7 +533,9 @@ class WindowsKnowledgeGraph:
         return self._cmd_index.get(cmd_lower)
 
     def _resolve_resource_node(self, resource: str) -> Optional[str]:
-        res_lower = resource.lower().strip()
+        res_lower = self._as_str(resource).lower().strip()
+        if not res_lower:
+            return None
         candidates = [
             f"service:{res_lower}",
             f"state:{res_lower}",
@@ -491,7 +546,9 @@ class WindowsKnowledgeGraph:
         return self._res_index.get(res_lower)
 
     def _resolve_error_node(self, error_sig: str) -> Optional[str]:
-        err_lower = error_sig.lower().strip()
+        err_lower = self._as_str(error_sig).lower().strip()
+        if not err_lower:
+            return None
         candidate = f"error:{err_lower}"
         if self.graph.has_node(candidate):
             return candidate

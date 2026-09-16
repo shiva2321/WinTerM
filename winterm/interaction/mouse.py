@@ -182,6 +182,24 @@ class MouseEngine:
         "        });\n"
         "    }\n"
         "\n"
+        "    public static void MoveSmoothFromCurrent(int endX, int endY, int steps) {\n"
+        "        RunOnDefaultDesktop(() => {\n"
+        "            POINT p; GetCursorPos(out p);\n"
+        "            int startX = p.X; int startY = p.Y;\n"
+        "            int n = steps > 5 ? steps : 20;\n"
+        "            int ctrlX = (startX + endX) / 2 + (new Random()).Next(-30, 30);\n"
+        "            int ctrlY = (startY + endY) / 2 + (new Random()).Next(-30, 30);\n"
+        "            for (int i = 1; i <= n; i++) {\n"
+        "                float t = (float)i / n; float u = 1.0f - t;\n"
+        "                int curX = (int)(u * u * startX + 2 * u * t * ctrlX + t * t * endX);\n"
+        "                int curY = (int)(u * u * startY + 2 * u * t * ctrlY + t * t * endY);\n"
+        "                SetCursorPos(curX, curY);\n"
+        "                System.Threading.Thread.Sleep(8);\n"
+        "            }\n"
+        "            SetCursorPos(endX, endY);\n"
+        "        });\n"
+        "    }\n"
+        "\n"
         "    public static ClickInWindowResult HoverInWindow(IntPtr hWnd, int relX, int relY, int dwellMs) {\n"
         "        var result = new ClickInWindowResult { TargetHwnd = hWnd.ToInt64() };\n"
         "        RunOnDefaultDesktop(() => {\n"
@@ -202,6 +220,12 @@ class MouseEngine:
         "                if (ancestor == IntPtr.Zero) ancestor = hitWnd;\n"
         "                result.ActualHwnd = ancestor.ToInt64();\n"
         "                result.ClickedInCorrectWindow = (ancestor == hWnd || hitWnd == hWnd || IsChild(hWnd, hitWnd) || (ancestor != IntPtr.Zero && IsChild(hWnd, ancestor)));\n"
+        "                if (!result.ClickedInCorrectWindow) {\n"
+        "                    result.Error = string.Format(\"Hover target ({0},{1}) is covered by HWND={2}, not target HWND={3}\",\n"
+        "                        absX, absY, ancestor.ToInt64(), hWnd.ToInt64());\n"
+        "                    result.Success = false;\n"
+        "                    return;\n"
+        "                }\n"
         "\n"
         "                SetCursorPos(absX, absY);\n"
         "                int waitTime = dwellMs > 0 ? dwellMs : 300;\n"
@@ -357,6 +381,15 @@ class MouseEngine:
             f"{cls.WIN32_MOUSE_HEADER}"
             f"[Win32MouseCore]::MoveSmooth({start_x}, {start_y}, {end_x}, {end_y}, {steps});\n"
             f"@{{ Action = 'MouseMoveSmooth'; StartX = {start_x}; StartY = {start_y}; EndX = {end_x}; EndY = {end_y}; Success = $True }} | ConvertTo-Json -Compress"
+        )
+
+    @classmethod
+    def build_move_smooth_from_current_command(cls, end_x: int, end_y: int, steps: int = 20) -> str:
+        """Smoothly moves the cursor from its *current* position to (end_x, end_y) along a Bezier path."""
+        return (
+            f"{cls.WIN32_MOUSE_HEADER}"
+            f"[Win32MouseCore]::MoveSmoothFromCurrent({end_x}, {end_y}, {steps});\n"
+            f"@{{ Action = 'MouseMoveSmooth'; EndX = {end_x}; EndY = {end_y}; Success = $True }} | ConvertTo-Json -Compress"
         )
 
     @classmethod
