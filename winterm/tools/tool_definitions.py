@@ -701,13 +701,17 @@ def winterm_playbook_match_run(
     goal: str,
     parameters: Optional[Dict[str, Any]] = None,
     background: bool = False,
+    confirm_high_risk: bool = False,
 ) -> Dict[str, Any]:
     """Matches a recurring situation against the playbook catalog, extracts parameters, and executes the generalized script.
-    
+
     Args:
         goal: The natural language objective (e.g. 'kill process using port 9000').
         parameters: Optional explicit parameter overrides (e.g. {'port': 9000}).
         background: If True runs command in background.
+        confirm_high_risk: Required True to run a playbook recorded as destructive when it
+            was created. A playbook's safety classification is checked on every replay, not
+            only once at creation time.
     """
     match_res = _agent_instance.playbooks.match_playbook(goal)
     if not match_res.matched or not match_res.playbook:
@@ -725,13 +729,15 @@ def winterm_playbook_match_run(
         playbook_id=match_res.playbook.playbook_id,
         parameters=merged_params,
         background=background,
+        confirm_high_risk=confirm_high_risk,
     )
+    gate_refused = exec_res.exit_code == -100 and "SAFETY GATE" in (exec_res.stderr or "")
     return {
         "matched": True,
         "playbook_id": match_res.playbook.playbook_id,
         "playbook_name": match_res.playbook.name,
         "parameters_used": merged_params,
-        "executed": True,
+        "executed": not gate_refused,
         "success": exec_res.success,
         "exit_code": exec_res.exit_code,
         "stdout": exec_res.stdout,
@@ -824,14 +830,18 @@ def winterm_swarm_suggestions(
     suggestion_id: Optional[str] = None,
     execute_now: bool = True,
     reason: str = "",
+    confirm_high_risk: bool = False,
 ) -> Dict[str, Any]:
     """Supervises, reviews, approves, or rejects proactive suggestions submitted by autonomous sub-agents.
-    
+
     Args:
         action: 'list' (view pending suggestions), 'approve' (approve suggestion), or 'reject' (reject suggestion).
         suggestion_id: ID of the suggestion to approve or reject.
         execute_now: If True and action is 'approve', executes the proposed action immediately.
         reason: Optional explanation if rejecting a suggestion.
+        confirm_high_risk: Required True to execute a suggestion classified high-risk/destructive
+            by the safety gate. A sub-agent's proposed_action is agent-authored free text and is
+            checked exactly like any other command -- approving a suggestion does not bypass this.
     """
     if action == "list":
         return {
@@ -840,7 +850,9 @@ def winterm_swarm_suggestions(
     elif action == "approve":
         if not suggestion_id:
             return {"approved": False, "error": "suggestion_id is required for approval."}
-        return _agent_instance.approve_swarm_suggestion(suggestion_id=suggestion_id, execute_now=execute_now)
+        return _agent_instance.approve_swarm_suggestion(
+            suggestion_id=suggestion_id, execute_now=execute_now, confirm_high_risk=confirm_high_risk
+        )
     elif action == "reject":
         if not suggestion_id:
             return {"rejected": False, "error": "suggestion_id is required for rejection."}
@@ -1427,6 +1439,11 @@ EXPORTED_TOOLS_SCHEMA = [
                     "goal": {"type": "string", "description": "The natural language goal describing the task to execute."},
                     "parameters": {"type": "object", "description": "Optional explicit parameter overrides dictionary."},
                     "background": {"type": "boolean", "default": False, "description": "If True, runs the playbook in the background."},
+                    "confirm_high_risk": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "Required True to run a playbook recorded as destructive when it was created. Checked on every replay, not only once at creation time.",
+                    },
                 },
                 "required": ["goal"],
             },
@@ -1537,6 +1554,11 @@ EXPORTED_TOOLS_SCHEMA = [
                     "suggestion_id": {"type": "string", "description": "ID of the suggestion to approve or reject."},
                     "execute_now": {"type": "boolean", "default": True, "description": "If True and approving, immediately executes the suggestion."},
                     "reason": {"type": "string", "description": "Optional explanation when rejecting a suggestion."},
+                    "confirm_high_risk": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "Required True to execute a suggestion the safety gate classifies as high-risk/destructive. Approving a suggestion does not bypass this check -- a sub-agent's proposed_action is checked exactly like any other command.",
+                    },
                 },
             },
         },

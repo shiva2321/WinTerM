@@ -70,6 +70,43 @@ class TestLayeredSafetySandbox:
         assert res.success is False
         assert "NOT authorized" in res.error
 
+    def test_scope_blocks_file_write_independent_of_category(self):
+        """Regression: allow_file_write must be enforced regardless of the
+        caller-supplied category, since that category is untrusted.
+
+        Before this fix, AgentScope.allow_file_write was defined per privilege
+        tier but never checked anywhere -- a READ_ONLY_AUDIT agent (documented
+        "non-modifying") could write files via Set-Content/Out-File/etc. by
+        calling execute_command with the default category (DIAGNOSTIC, which
+        is allowed for every tier), since SafetyGuard's destructive-verb list
+        covers deletion/formatting/power/registry, not generic writes.
+        """
+        board = SwarmMessageBoard()
+        scope = AgentScope.from_privilege(AgentPrivilege.READ_ONLY_AUDIT)
+        assert scope.allow_file_write is False
+        sandbox = SubAgentSandbox(agent_id="sub-fw", agent_name="Auditor", scope=scope, board=board)
+
+        res = sandbox.execute_guarded(
+            action_name="Write a file",
+            func=lambda: "written",
+            category=ActionCategory.DIAGNOSTIC,  # the permissive default every tier allows
+            command="Set-Content -Path 'C:\\temp\\poc.txt' -Value 'x'",
+        )
+        assert res.success is False
+        assert "SECURITY_VIOLATION" in res.error
+
+        # A tier with allow_file_write=True is unaffected.
+        write_scope = AgentScope.from_privilege(AgentPrivilege.TERMINAL_EXECUTOR)
+        assert write_scope.allow_file_write is True
+        write_sandbox = SubAgentSandbox(agent_id="sub-fw2", agent_name="Executor", scope=write_scope, board=board)
+        res2 = write_sandbox.execute_guarded(
+            action_name="Write a file",
+            func=lambda: "written",
+            category=ActionCategory.FILESYSTEM,
+            command="Set-Content -Path 'C:\\temp\\poc.txt' -Value 'x'",
+        )
+        assert res2.success is True
+
     def test_scope_blocks_desktop_interaction_when_disabled(self):
         board = SwarmMessageBoard()
         scope = AgentScope.from_privilege(AgentPrivilege.READ_ONLY_AUDIT)
@@ -237,6 +274,41 @@ class TestSwarmCoordinator:
 
         # Check suggestions list is now empty of pending
         assert len(coord.review_suggestions()) == 0
+
+    def test_approve_suggestion_refuses_destructive_action_without_confirmation(self):
+        """Regression: approving a suggestion must not bypass the safety gate.
+
+        A sub-agent's proposed_action is agent-authored free text -- exactly
+        the kind of input the safety gate exists to check. Before this fix,
+        SwarmCoordinator.approve_suggestion(execute_now=True) called the raw
+        executor directly with no gate at all: a sub-agent could propose
+        anything (framed as an innocuous "suggestion") and a single approval
+        call would run it, regardless of how destructive SafetyGuard would
+        classify it.
+        """
+        coord = SwarmCoordinator()
+        worker = coord.dispatch_subagent(name="Worker", privilege=AgentPrivilege.TERMINAL_EXECUTOR)
+        sug = worker.propose_suggestion(
+            title="Free up disk space",
+            reasoning="System32 has old files",
+            proposed_action="Remove-Item -Recurse -Force C:\\Windows\\System32",
+        )
+
+        # Unconfirmed: refused, nothing executed.
+        res = coord.approve_suggestion(sug.suggestion_id, execute_now=True, confirm_high_risk=False)
+        assert res["approved"] is False
+        assert res["executed"] is False
+        assert "classified as" in res["error"]
+
+        # Safe proposals are unaffected.
+        sug2 = worker.propose_suggestion(
+            title="Check volumes",
+            reasoning="diagnostics",
+            proposed_action="Get-Volume",
+        )
+        res2 = coord.approve_suggestion(sug2.suggestion_id, execute_now=True, confirm_high_risk=False)
+        assert res2["executed"] is True
+        assert res2["result"]["success"] is True
 
 
 class TestSwarmMCPTools:

@@ -1204,7 +1204,7 @@ def playbook_run(
                 console.print("[red]Error: --params JSON must be a dictionary/object[/red]")
                 return
         except Exception:
-            console.print("[red]Error: Invalid JSON passed to --params: {params}[/red]")
+            console.print(f"[red]Error: Invalid JSON passed to --params: {escape(params)}[/red]")
             return
 
     # If playbook_id exists directly
